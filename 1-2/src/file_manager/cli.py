@@ -19,35 +19,39 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
     pretty_exceptions_enable=False,
-    help="""1. Выберите логин и зарегистрируйтесь:
+    help="""1. Зарегистрируйте пользователя:
 
-file-manager --user alice register
+file-manager register
 
 2. Создайте, прочитайте и измените новый файл:
-file-manager --user alice file create note.txt --text 'Привет'
-file-manager --user alice file read note.txt
-file-manager --user alice file list
-file-manager --user alice file write note.txt --revision 1 --text 'Мир'
-file-manager --user alice file delete note.txt --revision 2
+file-manager file create note.txt --text 'Привет'
+file-manager file read note.txt
+file-manager file list
+file-manager file write note.txt --revision 1 --text 'Мир'
+file-manager file delete note.txt --revision 2
 Для своих файлов берите --revision из file list, а не из примера.
 Без --text команды записи читают stdin; в терминале запрашивают текст.
 
 3. Сохраните и прочитайте JSON/XML:
-file-manager --user alice json write data.json --text '{"x":1}'
-file-manager --user alice json read data.json
-file-manager --user alice xml write data.xml --text '<root>ok</root>'
-file-manager --user alice xml read data.xml
+file-manager json write data.json --text '{"x":1}'
+file-manager json read data.json
+file-manager xml write data.xml --text '<root>ok</root>'
+file-manager xml read data.xml
 
 4. Создайте ZIP и распакуйте его без перезаписи файлов:
-file-manager --user alice zip create backup.zip data.json data.xml
-file-manager --user alice zip extract backup.zip restored
+file-manager zip create backup.zip data.json data.xml
+file-manager zip extract backup.zip restored
 
 5. Посмотрите диски и журнал своих действий:
-file-manager --user alice disks
-file-manager --user alice audit
+file-manager disks
+file-manager audit
 
 Справка по отдельной команде:
-file-manager --user alice file write --help
+file-manager file write --help
+
+Выполнение команды под пользователем:
+file-manager --user alice file list
+Логин можно также задать через FM_USER.
 """,
 )
 file_app = typer.Typer(no_args_is_help=True, help="Создание, чтение, запись и удаление файлов.")
