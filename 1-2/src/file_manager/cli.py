@@ -21,34 +21,33 @@ app = typer.Typer(
     pretty_exceptions_enable=False,
     help="""1. Выберите логин и зарегистрируйтесь:
 
-  export FM_USER=alice
-  uv run --frozen file-manager register
+file-manager --user alice register
 
 2. Создайте, прочитайте и измените новый файл:
-  uv run --frozen file-manager file create note.txt --text 'Привет'
-  uv run --frozen file-manager file read note.txt
-  uv run --frozen file-manager file list
-  uv run --frozen file-manager file write note.txt --revision 1 --text 'Мир'
-  uv run --frozen file-manager file delete note.txt --revision 2
+file-manager --user alice file create note.txt --text 'Привет'
+file-manager --user alice file read note.txt
+file-manager --user alice file list
+file-manager --user alice file write note.txt --revision 1 --text 'Мир'
+file-manager --user alice file delete note.txt --revision 2
 Для своих файлов берите --revision из file list, а не из примера.
 Без --text команды записи читают stdin; в терминале запрашивают текст.
 
 3. Сохраните и прочитайте JSON/XML:
-  uv run --frozen file-manager json write data.json --text '{"x":1}'
-  uv run --frozen file-manager json read data.json
-  uv run --frozen file-manager xml write data.xml --text '<root>ok</root>'
-  uv run --frozen file-manager xml read data.xml
+file-manager --user alice json write data.json --text '{"x":1}'
+file-manager --user alice json read data.json
+file-manager --user alice xml write data.xml --text '<root>ok</root>'
+file-manager --user alice xml read data.xml
 
 4. Создайте ZIP и распакуйте его без перезаписи файлов:
-  uv run --frozen file-manager zip create backup.zip data.json data.xml
-  uv run --frozen file-manager zip extract backup.zip restored
+file-manager --user alice zip create backup.zip data.json data.xml
+file-manager --user alice zip extract backup.zip restored
 
 5. Посмотрите диски и журнал своих действий:
-  uv run --frozen file-manager disks
-  uv run --frozen file-manager audit
+file-manager --user alice disks
+file-manager --user alice audit
 
 Справка по отдельной команде:
-  uv run --frozen file-manager file write --help
+file-manager --user alice file write --help
 """,
 )
 file_app = typer.Typer(no_args_is_help=True, help="Создание, чтение, запись и удаление файлов.")
