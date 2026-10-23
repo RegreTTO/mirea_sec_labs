@@ -32,7 +32,7 @@ def register(connection, username: str, password: str) -> int:
     return cursor.lastrowid
 
 
-def authenticate(connection, username: str, password: str) -> int:
+def authenticate(connection, username: str, password: str, *, record_success: bool = True) -> int:
     row = connection.execute("SELECT * FROM Users WHERE username = ?", (username,)).fetchone()
     if len(password) > 1024:
         audit(connection, "login", row["id"] if row else None, status="denied")
@@ -43,5 +43,6 @@ def authenticate(connection, username: str, password: str) -> int:
     if not hmac.compare_digest(hash_password(password, salt), expected) or row is None:
         audit(connection, "login", row["id"] if row else None, status="denied")
         raise ManagerError("Неверный логин или пароль.")
-    audit(connection, "login", row["id"])
+    if record_success:
+        audit(connection, "login", row["id"])
     return row["id"]

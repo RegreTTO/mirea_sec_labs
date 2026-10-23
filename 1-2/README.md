@@ -11,20 +11,36 @@ SQLite хранит пользователей, метаданные и ауди
 ```sh
 uv sync --frozen
 uv run --frozen file-manager --help
-uv run --frozen file-manager --user alice register
-uv run --frozen file-manager --user alice file create notes/hello.txt --text 'Привет'
-uv run --frozen file-manager --user alice file read notes/hello.txt
+uv run --frozen file-manager register
+uv run --frozen file-manager login
+uv run --frozen file-manager file create notes/hello.txt --text 'Привет'
+uv run --frozen file-manager file read notes/hello.txt
 ```
 
-Без `FM_PASSWORD` регистрация запрашивает пароль дважды, остальные команды — один раз. Ввод пароля скрыт.
-Если терминал не позволяет скрыть ввод, приложение отказывает, а не переключается на открытый ввод.
-Логин: 1–64 латинских букв, цифр, точек, `_` или `-`. Пароль: 8–1024 символа.
-Каждая команда заново проверяет пароль. Сессий и токенов нет.
+`register` запрашивает логин и пароль; пароль вводится скрыто дважды. После регистрации выполните `login`.
+`login` запрашивает логин и пароль, затем сохраняет локальную сессию на 24 часа.
+Следующие команды используют вошедшего пользователя без повторного ввода логина или пароля.
+`logout` завершает сессию; новый `login` заменяет предыдущую сессию, в том числе при входе под другим пользователем.
 
-Параметры `--root` и `--user` указываются **до** подкоманды.
-Вместо них можно задать `FM_ROOT` и `FM_USER`.
-Для автоматизации допускается `FM_PASSWORD` в окружении процесса. Не сохраняйте его в Git, shell history или логах.
-Пароль нельзя передать аргументом CLI. На общей машине предпочтителен скрытый запрос: окружение тоже не является хранилищем секретов.
+Логин: 1–64 латинских букв, цифр, точек, `_` или `-`. Пароль: 8–1024 символа.
+Без терминала скрытый ввод запрещён: приложение не переключается на открытый ввод.
+
+Для `register` и `login` доступны опции `--user` и `--password`:
+
+```sh
+uv run --frozen file-manager login --user alice
+```
+
+Без `--password` пароль запрашивается скрыто. Передача пароля флагом разрешена для автоматизации, но небезопасна:
+аргумент виден в истории shell и списке процессов. Приложение предупреждает об этом в stderr, не повторяя пароль.
+Альтернатива — `FM_PASSWORD` в окружении процесса; не храните его в Git или shell history.
+`FM_USER` может задать логин для `register`/`login`; на пользователя сохранённой сессии эта переменная не влияет.
+Пароль не записывается ни в файл сессии, ни в аудит.
+
+`--root` указывается **до** подкоманды; вместо него можно задать `FM_ROOT`.
+Сессия относится к выбранному каталогу данных. Для работы из разных каталогов укажите постоянный абсолютный `FM_ROOT`.
+Глобальный `--user` оставлен как проверка ожидаемого логина активной сессии; он не выполняет вход и не переключает пользователя.
+Если сессии нет, она истекла или повреждена, защищённая команда завершается с предложением выполнить `file-manager login`.
 
 ## Команды
 
@@ -33,34 +49,34 @@ uv run --frozen file-manager --user alice file read notes/hello.txt
 
 ```sh
 # Метаданные, размер в байтах, владелец и revision.
-uv run --frozen file-manager --user alice file list
+uv run --frozen file-manager file list
 
 # Замена и удаление требуют актуальную revision из file list.
-uv run --frozen file-manager --user alice file write notes/hello.txt --revision 1 --text 'Новый текст'
-uv run --frozen file-manager --user alice file delete notes/hello.txt --revision 2
+uv run --frozen file-manager file write notes/hello.txt --revision 1 --text 'Новый текст'
+uv run --frozen file-manager file delete notes/hello.txt --revision 2
 
 # Запись документов создаёт новые файлы; некорректный ввод не сохраняется.
-uv run --frozen file-manager --user alice json write example.json --text '{"name":"Alice","items":[1,2]}'
-uv run --frozen file-manager --user alice json read example.json
-uv run --frozen file-manager --user alice xml write example.xml --text '<root><name>Alice</name></root>'
-uv run --frozen file-manager --user alice xml read example.xml
+uv run --frozen file-manager json write example.json --text '{"name":"Alice","items":[1,2]}'
+uv run --frozen file-manager json read example.json
+uv run --frozen file-manager xml write example.xml --text '<root><name>Alice</name></root>'
+uv run --frozen file-manager xml read example.xml
 
 # ZIP из своих файлов. Извлечение не перезаписывает существующие файлы.
-uv run --frozen file-manager --user alice zip create backup.zip example.json example.xml
-uv run --frozen file-manager --user alice zip extract backup.zip restored
-uv run --frozen file-manager --user alice file read restored/example.json
+uv run --frozen file-manager zip create backup.zip example.json example.xml
+uv run --frozen file-manager zip extract backup.zip restored
+uv run --frozen file-manager file read restored/example.json
 
 # Диски/точки монтирования и собственный аудит, включая удалённые файлы.
-uv run --frozen file-manager --user alice disks
-uv run --frozen file-manager --user alice audit
+uv run --frozen file-manager disks
+uv run --frozen file-manager audit
 ```
 
 Без `--text` команды записи читают до 8 МиБ + 1 байт из stdin. В терминале они запрашивают текст.
-Для двоичных файлов используйте перенаправление. Скрытый запрос пароля читает терминал, а не содержимое файла:
+Для двоичных файлов используйте перенаправление. Сначала выполните login; файловые команды не запрашивают пароль:
 
 ```sh
-uv run --frozen file-manager --user alice file create imported.zip < archive.zip
-uv run --frozen file-manager --user alice file read backup.zip > backup.zip
+uv run --frozen file-manager file create imported.zip < archive.zip
+uv run --frozen file-manager file read backup.zip > backup.zip
 ```
 
 Импортированный ZIP затем можно обработать через `zip extract`. JSON/XML также принимаются через stdin.
@@ -72,9 +88,10 @@ uv run --frozen file-manager --user alice file read backup.zip > backup.zip
 
 По умолчанию используется `.data/` относительно текущего каталога. Для постоянного расположения задайте абсолютный `--root`/`FM_ROOT`.
 
-- `manager.sqlite3` — таблицы `Users`, `Files`, `Operations`, их связи и индексы.
+- `manager.sqlite3` — таблицы `Users`, `Files`, `Operations`, `Sessions`, их связи и индексы.
 - `blobs/` — физические неизменяемые файлы с непрозрачными случайными именами.
 - `lock` — межпроцессная блокировка всех обращений к хранилищу.
+- `session` — случайный 256-битный токен текущего входа, файл с правами `0600`. В SQLite (`Sessions`) хранится только SHA-256 токена и срок действия. Файл `session.tmp` может кратковременно существовать при сохранении входа.
 
 Каталог данных и `blobs/` имеют права `0700`; БД, блокировка и файлы — `0600`.
 Приложение отклоняет существующее хранилище с небезопасными правами, не меняя их автоматически.
@@ -90,7 +107,7 @@ uv run --frozen file-manager --user alice file read backup.zip > backup.zip
 
 `revision` защищает от потерянного обновления: два клиента с одной версией не могут незаметно перезаписать друг друга.
 Удаление оставляет tombstone-запись в `Files`; связи аудита не удаляются. Чтение сверяет размер и SHA-256 с метаданными.
-Для резервной копии остановите все процессы приложения и сохраните **весь** каталог данных, включая SQLite и `blobs/`.
+Для резервной копии выполните `logout`, остановите все процессы приложения и сохраните **весь** каталог данных, включая SQLite и `blobs/`. Не переносите активную сессию как средство входа на другой компьютер.
 Отсутствующая БД при непустом `blobs/` считается ошибкой, а не поводом удалить файлы.
 
 ## Ограничения безопасности
@@ -110,6 +127,8 @@ uv run --frozen file-manager --user alice file read backup.zip > backup.zip
 
 - Пароли хешируются `scrypt` с отдельной 16-байтной солью: `N=32768`, `r=8`, `p=1`. Сравнение — `hmac.compare_digest`.
 - SQL использует параметры; внешние ключи включаются для каждого соединения.
+- Общий middleware проверяет сессию перед обработчиком каждой команды. Исключения: корневые `register` и `login`; справка и ошибки аргументов обрабатываются до авторизации.
+- Токен фиксируется на время одной команды и проверяется повторно при файловой операции. Если другой процесс сменил пользователя или выполнил logout, старая команда отклоняется, а не переключается на нового пользователя.
 - Владение проверяется на каждом обращении, включая источники ZIP и извлечённые файлы. Аудит доступен только своему пользователю.
 - Абсолютные пути, пустые компоненты, `.`/`..`, обратные слеши, двоеточия и управляющие символы путей отклоняются.
 - Пользовательский путь не передаётся файловой системе. Физические файлы открываются с `O_NOFOLLOW`; специальные файлы и hardlink отклоняются.
@@ -122,6 +141,7 @@ uv run --frozen file-manager --user alice file read backup.zip > backup.zip
 Граница защиты — пользователи **приложения**, не владелец процесса ОС или root.
 Человек с тем же UID и прямым доступом к каталогу может прочитать/подменить SQLite и физические файлы; от этого CLI не изолирует.
 Не размещайте хранилище в доступном другим пользователям каталоге и не используйте недоверенные родительские каталоги/сетевые ФС.
+При сбое между записью файла сессии и commit SQLite вход может стать недействительным: выполните login повторно. Приложение отказывает, а не доверяет имени пользователя в локальном файле.
 Хранилище не шифруется. Аудит не защищён от изменения владельцем ОС и растёт без автоматического удаления.
 При исчерпании диска, ошибке БД или невозможности записать аудит операция не подтверждается; такой отказ может не попасть в БД.
 Поддержка Windows, сетевого доступа и CI/CD не входит в lab1.
@@ -135,9 +155,9 @@ uv run --frozen file-manager --user alice file read backup.zip > backup.zip
 
 ## Демонстрация lab1
 
-1. Зарегистрируйте `alice` и `bob` с разными паролями.
+1. Зарегистрируйте `alice` и `bob` с разными паролями, выполните `login` под `alice`.
 2. Выполните CRUD от `alice`, проверьте изменение `revision` и отказ при устаревшей версии.
-3. Попробуйте прочитать тот же путь от `bob`: файл недоступен. Проверьте отказ с неверным паролем.
+3. Выполните `login` под `bob` и попробуйте прочитать тот же путь: файл недоступен. Проверьте отказ login с неверным паролем и отказ файловой команды после logout.
 4. Запишите и прочитайте JSON/XML, затем передайте некорректный документ и XML с `DOCTYPE`: сохранение должно отклониться.
 5. Создайте ZIP, извлеките в `restored`, сравните содержимое. Проверьте отказ для пути `../escape` и ZIP с таким элементом.
 6. Покажите `disks`, `file list` и `audit`. После удаления файла и повторного запуска его история остаётся в SQLite.

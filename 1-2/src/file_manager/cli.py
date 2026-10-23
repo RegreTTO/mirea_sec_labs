@@ -14,14 +14,16 @@ import typer
 from .errors import ManagerError
 from .limits import MAX_FILE_BYTES
 from .manager import FileManager
+from .middleware import AuthorizedTyper
 
-app = typer.Typer(
+app = AuthorizedTyper(
     no_args_is_help=True,
     add_completion=False,
     pretty_exceptions_enable=False,
-    help="""1. Зарегистрируйте пользователя:
+    help="""1. Зарегистрируйтесь и войдите:
 
 file-manager register
+file-manager login
 
 2. Создайте, прочитайте и измените новый файл:
 file-manager file create note.txt --text 'Привет'
@@ -29,8 +31,6 @@ file-manager file read note.txt
 file-manager file list
 file-manager file write note.txt --revision 1 --text 'Мир'
 file-manager file delete note.txt --revision 2
-Для своих файлов берите --revision из file list, а не из примера.
-Без --text команды записи читают stdin; в терминале запрашивают текст.
 
 3. Сохраните и прочитайте JSON/XML:
 file-manager json write data.json --text '{"x":1}'
@@ -46,18 +46,20 @@ file-manager zip extract backup.zip restored
 file-manager disks
 file-manager audit
 
+6. Войдите под указанным пользователем:
+file-manager login --user alice
+
+7. Завершите сессию:
+file-manager logout
+
 Справка по отдельной команде:
 file-manager file write --help
-
-Выполнение команды под пользователем:
-file-manager --user alice file list
-Логин можно также задать через FM_USER.
 """,
 )
-file_app = typer.Typer(no_args_is_help=True, help="Создание, чтение, запись и удаление файлов.")
-json_app = typer.Typer(no_args_is_help=True, help="Проверка и сохранение JSON.")
-xml_app = typer.Typer(no_args_is_help=True, help="Проверка и сохранение XML без DTD и сущностей.")
-zip_app = typer.Typer(no_args_is_help=True, help="Создание и безопасная распаковка ZIP.")
+file_app = AuthorizedTyper(no_args_is_help=True, help="Создание, чтение, запись и удаление файлов.")
+json_app = AuthorizedTyper(no_args_is_help=True, help="Проверка и сохранение JSON.")
+xml_app = AuthorizedTyper(no_args_is_help=True, help="Проверка и сохранение XML без DTD и сущностей.")
+zip_app = AuthorizedTyper(no_args_is_help=True, help="Создание и безопасная распаковка ZIP.")
 app.add_typer(file_app, name="file")
 app.add_typer(json_app, name="json")
 app.add_typer(xml_app, name="xml")
@@ -68,17 +70,25 @@ app.add_typer(zip_app, name="zip")
 def configure(
     context: typer.Context,
     root: Annotated[Path, typer.Option(help="Закрытый каталог данных (0700).", envvar="FM_ROOT")] = Path(".data"),
-    user: Annotated[str, typer.Option(help="Логин пользователя.", envvar="FM_USER")] = "",
+    user: Annotated[str, typer.Option(help="Логин для register/login; ожидаемый логин сессии для остальных команд.")] = "",
 ):
     context.obj = {"root": root, "user": user}
 
 
-def manager(context: typer.Context, *, registration=False) -> FileManager:
-    settings = context.obj
-    if not settings["user"]:
-        raise ManagerError("Укажите логин через --user или FM_USER.")
-    # Пароль не принимается аргументом: он не должен попадать в историю shell/ps.
-    password = os.environ.get("FM_PASSWORD")
+def manager(context: typer.Context) -> FileManager:
+    return context.find_root().obj["manager"]
+
+
+def credentials(context: typer.Context, user: str | None, password: str | None,
+                *, registration=False) -> FileManager:
+    settings = context.find_root().obj
+    username = user if user is not None else settings["user"] or os.environ.get("FM_USER", "")
+    if not username:
+        username = typer.prompt("Логин", err=True)
+    if password is not None:
+        typer.echo("Предупреждение: --password виден в истории shell и списке процессов. Предпочитайте скрытый ввод.", err=True)
+    else:
+        password = os.environ.get("FM_PASSWORD")
     if password is None:
         # getpass отключает эхо до показа приглашения. Запрещаем небезопасный
         # fallback на открытый ввод, когда терминал недоступен.
@@ -90,7 +100,7 @@ def manager(context: typer.Context, *, registration=False) -> FileManager:
                     raise ManagerError("Пароли не совпадают.")
             except getpass.GetPassWarning as error:
                 raise ManagerError("Для скрытого ввода нужен терминал. Для автоматизации задайте FM_PASSWORD.") from error
-    return FileManager(settings["root"], settings["user"], password)
+    return FileManager(settings["root"], username, password)
 
 
 def input_content(text: str | None) -> bytes:
@@ -125,10 +135,32 @@ def print_content(content: bytes) -> None:
 
 
 @app.command()
-def register(context: typer.Context):
-    """Создать пользователя. Пароль запрашивается скрыто с подтверждением."""
-    manager(context, registration=True).register()
-    typer.echo("Пользователь создан.")
+def register(
+    context: typer.Context,
+    user: Annotated[str | None, typer.Option("--user", help="Логин; без опции запрашивается интерактивно.")] = None,
+    password: Annotated[str | None, typer.Option(help="Пароль. Небезопасно: аргумент виден в истории shell и ps.")] = None,
+):
+    """Создать пользователя. Без опций логин и пароль запрашиваются интерактивно."""
+    credentials(context, user, password, registration=True).register()
+    typer.echo("Пользователь создан. Выполните file-manager login.")
+
+
+@app.command()
+def login(
+    context: typer.Context,
+    user: Annotated[str | None, typer.Option("--user", help="Логин; без опции запрашивается интерактивно.")] = None,
+    password: Annotated[str | None, typer.Option(help="Пароль. Небезопасно: аргумент виден в истории shell и ps.")] = None,
+):
+    """Войти и сохранить локальную сессию на 24 часа без сохранения пароля."""
+    credentials(context, user, password).login()
+    typer.echo("Вход выполнен. Сессия сохранена на 24 часа.")
+
+
+@app.command()
+def logout(context: typer.Context):
+    """Завершить текущую сессию и удалить локальный токен."""
+    manager(context).logout()
+    typer.echo("Выход выполнен.")
 
 
 @app.command()

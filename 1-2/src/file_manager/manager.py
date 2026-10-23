@@ -1,13 +1,15 @@
 """Файловые операции: права, неизменяемое содержимое, метаданные и аудит."""
 
 import hashlib
+import secrets
+import time
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import archives, auth, formats
+from . import archives, auth, formats, sessions
 from .database import audit, connect
 from .disks import list_disks
 from .errors import ManagerError
@@ -24,10 +26,64 @@ class Operation:
 
 
 class FileManager:
-    def __init__(self, root: Path, username: str, password: str):
+    def __init__(self, root: Path, username: str = "", password: str = "", *, session_token: str | None = None):
         self.root = root
         self.username = username
         self.password = password
+        self.session_token = session_token
+
+    @classmethod
+    def current(cls, root: Path, expected_user: str = ""):
+        if not root.expanduser().exists():
+            raise ManagerError(sessions.LOGIN_REQUIRED)
+        storage = Storage(root)
+        try:
+            with storage.locked(), connect(storage) as connection:
+                try:
+                    token = sessions.read_token(storage)
+                except ManagerError:
+                    audit(connection, "session_check", None, status="denied")
+                    raise
+                user = sessions.authenticate(connection, token)
+                if expected_user and expected_user != user["username"]:
+                    audit(connection, "session_check", user["id"], status="denied")
+                    raise ManagerError("Сессия другого пользователя. Выполните file-manager login.")
+                return cls(root, session_token=token)
+        finally:
+            storage.close()
+
+    def login(self) -> None:
+        storage = Storage(self.root)
+        try:
+            with storage.locked(), connect(storage) as connection:
+                # Отказ проверки пароля сохраняется в аудите до транзакции сессии.
+                user_id = auth.authenticate(connection, self.username, self.password, record_success=False)
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    token = secrets.token_hex(32)
+                    connection.execute(
+                        "INSERT INTO Sessions(id, user_id, token_hash, expires_at) VALUES (1, ?, ?, ?) "
+                        "ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, "
+                        "token_hash=excluded.token_hash, expires_at=excluded.expires_at",
+                        (user_id, sessions.token_hash(token), int(time.time()) + sessions.SESSION_SECONDS),
+                    )
+                    sessions.write_token(storage, token)
+                    audit(connection, "login", user_id)
+                    connection.commit()
+                except BaseException as error:
+                    connection.rollback()
+                    # При сбое после замены файла токен не совпадёт с БД: повторный
+                    # login восстановит сессию. Старые данные файлов не затронуты.
+                    audit(connection, "login", user_id, status="denied" if isinstance(error, ManagerError) else "error")
+                    raise
+        finally:
+            storage.close()
+
+    def logout(self) -> None:
+        with self.operation("logout") as operation:
+            operation.connection.execute("DELETE FROM Sessions WHERE id = 1")
+            sessions.remove_token(operation.storage)
+            audit(operation.connection, "logout", operation.user_id)
 
     @contextmanager
     def operation(self, action: str, path: str | None = None, *, registration=False):
@@ -38,9 +94,14 @@ class FileManager:
                     "SELECT blob FROM Files WHERE deleted = 0"
                 )}
                 storage.prune(referenced)
-                user_id = None if registration else auth.authenticate(
-                    connection, self.username, self.password
-                )
+                if registration:
+                    user_id = None
+                elif self.session_token is not None:
+                    user_id = sessions.authenticate(connection, self.session_token)["id"]
+                elif self.username:
+                    user_id = auth.authenticate(connection, self.username, self.password)
+                else:
+                    raise ManagerError(sessions.LOGIN_REQUIRED)
                 operation = Operation(connection, storage, user_id)
                 connection.execute("BEGIN IMMEDIATE")
                 try:

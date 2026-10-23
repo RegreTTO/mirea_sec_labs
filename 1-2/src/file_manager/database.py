@@ -14,6 +14,12 @@ CREATE TABLE IF NOT EXISTS Users (
     salt BLOB NOT NULL,
     password_hash BLOB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS Sessions (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    user_id INTEGER NOT NULL REFERENCES Users(id),
+    token_hash TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS Files (
     id INTEGER PRIMARY KEY,
     owner_id INTEGER NOT NULL REFERENCES Users(id),
