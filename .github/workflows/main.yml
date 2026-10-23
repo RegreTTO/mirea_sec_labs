@@ -1,0 +1,161 @@
+name: File manager CI
+
+on:
+  push:
+    branches: [main]
+    paths: ['1-2/**', '.github/workflows/main.yml']
+  pull_request:
+    paths: ['1-2/**', '.github/workflows/main.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONNOUSERSITE: '1'
+  UV_PYTHON_DOWNLOADS: never
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: 1-2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./1-2/ci/setup
+      - name: Install dependencies and build distributions
+        run: |
+          mkdir -p dist
+          uv export --frozen --no-dev --no-emit-project --output-file dist/requirements.txt
+          python -m pip install --require-hashes -r dist/requirements.txt
+          python -m compileall -q src
+          uv build --build-constraint ci/build-constraints.txt --out-dir dist
+          (cd dist && sha256sum *.whl *.tar.gz requirements.txt > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: python-package
+          path: 1-2/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: 1-2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./1-2/ci/setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: python-package
+          path: 1-2/dist
+      - name: Test installed wheel
+        run: |
+          (cd dist && sha256sum -c SHA256SUMS)
+          python -m pip install --require-hashes -r dist/requirements.txt
+          python -m pip install --no-deps dist/*.whl
+          python -m pytest tests -q --junitxml=reports/junit.xml
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: test-report
+          path: 1-2/reports/junit.xml
+          if-no-files-found: warn
+          retention-days: 7
+
+  sast:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: 1-2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./1-2/ci/setup
+      - name: Scan application and enforce severity gate
+        run: |
+          mkdir -p reports
+          bandit -r src/file_manager --ignore-nosec -f json -o reports/bandit.json --exit-zero
+          python ci/check_sast.py reports/bandit.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: sast-report
+          path: 1-2/reports/bandit.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  image:
+    needs: [build, test, sast]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: python-package
+          path: 1-2/dist
+      - name: Build and smoke-test image
+        working-directory: 1-2
+        run: |
+          (cd dist && sha256sum -c SHA256SUMS)
+          docker build --tag "mirea-file-manager:ci-${GITHUB_SHA}" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" .
+          bash ci/smoke_image.sh "mirea-file-manager:ci-${GITHUB_SHA}"
+          mkdir -p reports
+          docker save "mirea-file-manager:ci-${GITHUB_SHA}" | gzip > reports/image.tar.gz
+          (cd reports && sha256sum image.tar.gz > image.sha256)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-image
+          path: |
+            1-2/reports/image.tar.gz
+            1-2/reports/image.sha256
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: image
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !github.event.act
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Reject local publication
+        run: test "${ACT:-false}" != true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: docker-image
+          path: image
+      - name: Publish verified image to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd image
+          sha256sum -c image.sha256
+          docker load --input image.tar.gz
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/mirea-file-manager:sha-${GITHUB_SHA}"
+          docker tag "mirea-file-manager:ci-${GITHUB_SHA}" "$image"
+          export DOCKER_CONFIG
+          DOCKER_CONFIG=$(mktemp -d)
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$image"
+          printf 'Image: `%s`\n' "$image" >> "$GITHUB_STEP_SUMMARY"
