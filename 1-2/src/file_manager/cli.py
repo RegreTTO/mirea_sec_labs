@@ -15,8 +15,47 @@ from .errors import ManagerError
 from .limits import MAX_FILE_BYTES
 from .manager import FileManager
 
-app = typer.Typer(no_args_is_help=True, add_completion=False, pretty_exceptions_enable=False,
-                  help="Безопасный локальный файловый менеджер.")
+app = typer.Typer(
+    no_args_is_help=True,
+    add_completion=False,
+    pretty_exceptions_enable=False,
+    help="""Безопасный локальный файловый менеджер.
+
+Краткий гайд (запускайте из каталога проекта).
+Пароль вводится скрыто. Данные по умолчанию — в .data/.
+Пути относятся только к файлам текущего пользователя.
+
+1. Выберите логин и зарегистрируйтесь:
+  export FM_USER=alice
+  uv run --frozen file-manager register
+
+2. Создайте, прочитайте и измените новый файл:
+  uv run --frozen file-manager file create note.txt --text 'Привет'
+  uv run --frozen file-manager file read note.txt
+  uv run --frozen file-manager file list
+  uv run --frozen file-manager file write note.txt --revision 1 --text 'Мир'
+  uv run --frozen file-manager file delete note.txt --revision 2
+Для своих файлов берите --revision из file list, а не из примера.
+Без --text команды записи читают stdin; в терминале запрашивают текст.
+
+3. Сохраните и прочитайте JSON/XML:
+  uv run --frozen file-manager json write data.json --text '{"x":1}'
+  uv run --frozen file-manager json read data.json
+  uv run --frozen file-manager xml write data.xml --text '<root>ok</root>'
+  uv run --frozen file-manager xml read data.xml
+
+4. Создайте ZIP и распакуйте его без перезаписи файлов:
+  uv run --frozen file-manager zip create backup.zip data.json data.xml
+  uv run --frozen file-manager zip extract backup.zip restored
+
+5. Посмотрите диски и журнал своих действий:
+  uv run --frozen file-manager disks
+  uv run --frozen file-manager audit
+
+Справка по отдельной команде:
+  uv run --frozen file-manager file write --help
+""",
+)
 file_app = typer.Typer(no_args_is_help=True, help="Создание, чтение, запись и удаление файлов.")
 json_app = typer.Typer(no_args_is_help=True, help="Проверка и сохранение JSON.")
 xml_app = typer.Typer(no_args_is_help=True, help="Проверка и сохранение XML без DTD и сущностей.")
