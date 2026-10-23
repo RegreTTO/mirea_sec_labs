@@ -19,13 +19,8 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
     pretty_exceptions_enable=False,
-    help="""Безопасный локальный файловый менеджер.
+    help="""1. Выберите логин и зарегистрируйтесь:
 
-Краткий гайд (запускайте из каталога проекта).
-Пароль вводится скрыто. Данные по умолчанию — в .data/.
-Пути относятся только к файлам текущего пользователя.
-
-1. Выберите логин и зарегистрируйтесь:
   export FM_USER=alice
   uv run --frozen file-manager register
 
