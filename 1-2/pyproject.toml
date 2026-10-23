@@ -1,0 +1,17 @@
+[project]
+name = "mirea-file-manager"
+version = "0.1.0"
+description = "Учебный безопасный файловый менеджер с SQLite"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["typer>=0.21,<1"]
+
+[project.scripts]
+file-manager = "file_manager.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "file_manager"
