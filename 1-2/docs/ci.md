@@ -18,6 +18,12 @@ Test устанавливает этот wheel без editable-режима. SAS
 Image получает артефакт Build; Publish получает сохранённый образ Image, а не пересобирает его.
 Кэш pip/uv ускоряет повторные запуски, но не заменяет артефакты.
 
+`tests/test_manager.py` проверяет доменные сервисы `AuthService`, `FileService`,
+`DocumentService`, `ArchiveService` и `AuditService` напрямую; удалённый фасад
+`file_manager.manager.FileManager` не используется. Для проверки всего набора
+на Linux/macOS запускайте `uv run --frozen --with pytest==8.4.2 python -m pytest tests -q`.
+Один `unittest discover` не запускает функциональные pytest-тесты и не заменяет этап Test.
+
 ## Локальный запуск
 
 Нужны Git-checkout всего репозитория, Docker и `act`. На macOS:
