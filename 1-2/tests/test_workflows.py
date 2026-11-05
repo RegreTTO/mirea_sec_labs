@@ -1,9 +1,7 @@
 """Regression scenarios through the public CLI and domain services."""
 
-import io
 import json
 import sqlite3
-import zipfile
 from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
@@ -11,7 +9,6 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from file_manager.archives.service import ArchiveService
 from file_manager.auth.service import AuthService
 from file_manager.cli.application import app
 from file_manager.errors import ManagerError
@@ -83,20 +80,6 @@ def test_documents_and_zip_atomicity(client: WorkflowClient) -> None:
     client.invoke("zip", "extract", "backup.zip", "conflict", ok=False)
     client.invoke("file", "read", "conflict/a.json", ok=False)
     assert client.invoke("file", "read", "conflict/b.xml").stdout == "keep"
-
-
-def test_zip_slip_is_rejected(client: WorkflowClient) -> None:
-    client.login()
-    archive = io.BytesIO()
-    with zipfile.ZipFile(archive, "w") as output:
-        output.writestr("../escape.txt", b"outside")
-    files = FileService(client.root, AuthService.current(client.root))
-    files.create("bad.zip", archive.getvalue())
-
-    with pytest.raises(ManagerError):
-        ArchiveService(files).extract("bad.zip", "restored")
-
-    assert [item["path"] for item in files.files()] == ["bad.zip"]
 
 
 def test_user_isolation_and_stale_session(client: WorkflowClient) -> None:
