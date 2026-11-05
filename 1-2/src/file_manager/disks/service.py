@@ -1,11 +1,15 @@
-"""Точки монтирования macOS/Linux без запуска команд оболочки."""
+"""Точки монтирования, сведения о дисках и аудит обращений."""
 
 import ctypes
 import os
 import platform
 import re
+from pathlib import Path
 
-from .errors import ManagerError
+from ..audit.service import audit
+from ..auth.security import Identity
+from ..errors import ManagerError
+from ..db.operations import operation_scope
 
 
 def _linux_mounts() -> list[dict]:
@@ -68,3 +72,15 @@ def list_disks() -> list[dict]:
         except OSError as error:
             mount["error"] = error.strerror or "Накопитель недоступен."
     return mounts
+
+
+class DiskService:
+    def __init__(self, root: Path, identity: Identity):
+        self.root = root
+        self.identity = identity
+
+    def list(self) -> list[dict]:
+        with operation_scope(self.root, self.identity, "disks") as operation:
+            result = list_disks()
+            audit(operation.connection, "disks", operation.user_id)
+            return result

@@ -1,13 +1,14 @@
-"""ZIP обрабатывается в памяти; имена архива никогда не передаются файловой системе."""
+"""Создание и безопасная атомарная распаковка ZIP."""
 
 import io
 import stat
 import zipfile
 import zlib
 
-from .errors import ManagerError
-from .limits import MAX_ARCHIVE_ENTRIES, MAX_EXTRACTED_BYTES, MAX_FILE_BYTES
-from .storage import validate_path
+from ..audit.service import audit
+from ..errors import ManagerError
+from ..files.service import FileService, validate_path
+from ..limits import MAX_ARCHIVE_ENTRIES, MAX_EXTRACTED_BYTES, MAX_FILE_BYTES
 
 
 def create_zip(files: dict[str, bytes]) -> bytes:
@@ -84,3 +85,37 @@ def extract_zip(content: bytes) -> dict[str, bytes]:
         return result
     except (zipfile.BadZipFile, NotImplementedError, RuntimeError, EOFError, ValueError, zlib.error) as error:
         raise ManagerError("Повреждённый или неподдерживаемый ZIP.") from error
+
+
+class ArchiveService:
+    def __init__(self, files: FileService):
+        self.files = files
+
+    def create(self, path: str, sources: list[str]) -> dict:
+        with self.files.operation("zip_create", path) as operation:
+            validate_path(path)
+            if len(sources) != len(set(sources)):
+                raise ManagerError("Исходные пути ZIP не должны повторяться.")
+            if not 1 <= len(sources) <= MAX_ARCHIVE_ENTRIES:
+                raise ManagerError("ZIP должен содержать от 1 до 128 файлов.")
+            files = {}
+            total = 0
+            for source in sources:
+                row = self.files.owned_file(operation, source)
+                total += row["size"]
+                if total > MAX_EXTRACTED_BYTES:
+                    raise ManagerError("Суммарный размер исходных файлов превышает 32 МиБ.")
+                files[source] = self.files.read_content(operation, row)
+                audit(operation.connection, "zip_source_read", operation.user_id, source, row["id"])
+            return self.files.insert_file(operation, path, create_zip(files), "zip_create")
+
+    def extract(self, path: str, destination: str) -> list[dict]:
+        with self.files.operation("zip_extract", path) as operation:
+            validate_path(destination)
+            row = self.files.owned_file(operation, path)
+            entries = extract_zip(self.files.read_content(operation, row))
+            result = []
+            for name, content in entries.items():
+                result.append(self.files.insert_file(operation, f"{destination}/{name}", content, "zip_extract_file"))
+            audit(operation.connection, "zip_extract", operation.user_id, path, row["id"])
+            return result

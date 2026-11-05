@@ -3,7 +3,7 @@
 import typer
 from typer.core import TyperCommand
 
-from .manager import FileManager
+from .service import AuthService
 
 
 class AuthorizedCommand(TyperCommand):
@@ -12,7 +12,7 @@ class AuthorizedCommand(TyperCommand):
                   and self.name in {"register", "login"})
         if not public:
             settings = context.find_root().obj
-            settings["manager"] = FileManager.current(settings["root"], settings["user"])
+            settings["identity"] = AuthService.current(settings["root"], settings["user"])
         return super().invoke(context)
 
 

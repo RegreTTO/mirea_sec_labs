@@ -4,7 +4,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
-from .errors import ManagerError
+from ..errors import ManagerError
 from .storage import Storage, check_private_file
 
 SCHEMA = """
@@ -78,12 +78,3 @@ def connect(storage: Storage):
         yield connection
     finally:
         connection.close()
-
-
-def audit(connection, action: str, user_id: int | None, path: str | None = None,
-          file_id: int | None = None, status: str = "success") -> None:
-    # Не сохраняем содержимое, пароль, исключение или неограниченный пользовательский ввод.
-    connection.execute(
-        "INSERT INTO Operations(action, user_id, file_id, path, status) VALUES (?, ?, ?, ?, ?)",
-        (action, user_id, file_id, path[:1024] if path else None, status),
-    )

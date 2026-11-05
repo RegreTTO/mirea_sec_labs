@@ -8,25 +8,11 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
-from .errors import ManagerError
-from .limits import MAX_FILE_BYTES
+from ..errors import ManagerError
+from ..limits import MAX_FILE_BYTES
 
+BLOBS_DIR_NAME = "blobs"
 BLOB_NAME = re.compile(r"[0-9a-f]{32}\Z")
-
-
-def validate_path(path: str) -> str:
-    if (
-        not path
-        or len(path.encode("utf-8")) > 1024
-        or path.startswith("/")
-        or "\\" in path
-        or ":" in path
-        or any(ord(char) < 32 or ord(char) == 127 for char in path)
-        or any(part in ("", ".", "..") or len(part.encode("utf-8")) > 255
-               for part in path.split("/"))
-    ):
-        raise ManagerError("Нужен относительный путь без '.', '..', ссылок и управляющих символов.")
-    return path
 
 
 def check_private_file(fd: int) -> None:
@@ -52,11 +38,11 @@ class Storage:
             if info.st_uid != os.getuid() or info.st_mode & 0o077:
                 raise ManagerError("Каталог данных должен принадлежать текущему пользователю и иметь права 0700.")
             try:
-                os.mkdir("blobs", 0o700, dir_fd=self.root_fd)
+                os.mkdir(BLOBS_DIR_NAME, 0o700, dir_fd=self.root_fd)
             except FileExistsError:
                 pass
             self.blobs_fd = os.open(
-                "blobs", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.root_fd
+                BLOBS_DIR_NAME, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.root_fd
             )
             info = os.fstat(self.blobs_fd)
             if info.st_uid != os.getuid() or info.st_mode & 0o077:

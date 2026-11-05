@@ -1,12 +1,14 @@
-"""Проверка недоверенных JSON/XML до сохранения или возврата документа."""
+"""Проверка, чтение и сохранение JSON/XML."""
 
 import json
 import math
 import xml.etree.ElementTree as ElementTree
 from xml.parsers import expat
 
-from .errors import ManagerError
-from .limits import MAX_DOCUMENT_DEPTH, MAX_FILE_BYTES, MAX_XML_ELEMENTS
+from ..audit.service import audit
+from ..errors import ManagerError
+from ..files.service import FileService, validate_path
+from ..limits import MAX_DOCUMENT_DEPTH, MAX_FILE_BYTES, MAX_XML_ELEMENTS
 
 
 def check_size(content: bytes) -> None:
@@ -92,3 +94,32 @@ def xml_document(content: bytes) -> bytes:
         return result
     except (expat.ExpatError, ElementTree.ParseError, ValueError, RecursionError) as error:
         raise ManagerError("Некорректный XML.") from error
+
+
+class DocumentService:
+    def __init__(self, files: FileService):
+        self.files = files
+
+    def create(self, path: str, content: bytes, kind: str) -> dict:
+        with self.files.operation(f"{kind}_create", path) as operation:
+            validate_path(path)
+            if kind == "json":
+                content = json_document(content)
+            elif kind == "xml":
+                content = xml_document(content)
+            else:
+                raise ManagerError("Неизвестный формат.")
+            return self.files.insert_file(operation, path, content, f"{kind}_create")
+
+    def read(self, path: str, kind: str) -> bytes:
+        with self.files.operation(f"{kind}_read", path) as operation:
+            row = self.files.owned_file(operation, path)
+            content = self.files.read_content(operation, row)
+            if kind == "json":
+                content = json_document(content)
+            elif kind == "xml":
+                content = xml_document(content)
+            else:
+                raise ManagerError("Неизвестный формат.")
+            audit(operation.connection, f"{kind}_read", operation.user_id, path, row["id"])
+            return content

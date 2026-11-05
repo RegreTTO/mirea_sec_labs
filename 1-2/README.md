@@ -148,10 +148,35 @@ uv run --frozen file-manager file read backup.zip > backup.zip
 
 ## Структура
 
-- `src/file_manager/` — CLI, файловые операции, SQLite, авторизация, форматы, архивы и диски; каждый модуль отвечает за свою область.
+- `src/file_manager/` разделён по доменам. В каждом домене `commands.py` содержит обработчики CLI, `service.py` — операции приложения:
+
+  ```text
+  file_manager/
+  ├── auth/            # commands, service, security, middleware
+  ├── files/           # commands, service: пути, CRUD, владение, квоты, версии
+  ├── documents/       # commands, service: JSON/XML и проверка форматов
+  ├── archives/        # commands, service: ZIP и атомарная распаковка
+  ├── audit/           # commands, service: чтение и запись журнала
+  ├── disks/           # commands, service: сведения о накопителях
+  ├── db/              # storage, database, operations: блокировки и транзакции
+  ├── cli/             # application, common: сборка CLI, контекст и ввод/вывод
+  ├── errors.py        # общий тип ошибки приложения
+  └── limits.py        # общие ограничения ресурсов
+  ```
+
+  `cli/application.py` только подключает группы команд, задаёт глобальные опции и обрабатывает ошибки.
+  Проверка сессии в `auth/middleware.py` сохраняет неизменный токен на время команды;
+  `Identity` в `auth/security.py` повторно проверяет его под блокировкой перед операцией.
+  Ввод логина и пароля находится рядом с командами в `auth/commands.py`.
+  JSON/XML и ZIP используют файловый сервис для контроля владельца и общую транзакцию для отката.
+  CLI обращается прямо к доменным сервисам.
 - `docs/` — адаптированные ТЗ и учебные материалы. `docs/sources/` содержит неизменённые снимки, `docs/assets/` — иллюстрации.
 
 Сборка поставляемого пакета: `uv build`. Зависимости зафиксированы в `uv.lock`; запуск с `--frozen` не меняет lock-файл.
+
+Регрессионные проверки: `uv run --frozen python -m unittest discover -s tests -v`.
+На Linux/macOS они используют настоящее POSIX-хранилище; на Windows подменяют только границу хранилища и файл токена,
+сохраняя настоящие SQLite, проверки паролей, транзакции, сервисы и CLI. Такая проверка на Windows не подтверждает работу POSIX-прав и блокировок.
 
 ## Демонстрация lab1
 
