@@ -10,12 +10,14 @@ import time
 from dataclasses import dataclass
 
 from ..db.audit import audit
-from ..errors import ManagerError
 from ..db.storage import Storage, check_private_file
+from ..errors import ManagerError
 
 
 def hash_password(password: str, salt: bytes) -> bytes:
-    return hashlib.scrypt(password.encode("utf-8"), salt=salt, n=32768, r=8, p=1, maxmem=64 * 1024 * 1024)
+    return hashlib.scrypt(
+        password.encode("utf-8"), salt=salt, n=32768, r=8, p=1, maxmem=64 * 1024 * 1024
+    )
 
 
 def register_user(connection, username: str, password: str) -> int:
@@ -36,7 +38,9 @@ def register_user(connection, username: str, password: str) -> int:
     return cursor.lastrowid
 
 
-def authenticate_password(connection, username: str, password: str, *, record_success: bool = True) -> int:
+def authenticate_password(
+    connection, username: str, password: str, *, record_success: bool = True
+) -> int:
     row = connection.execute("SELECT * FROM Users WHERE username = ?", (username,)).fetchone()
     if len(password) > 1024:
         audit(connection, "login", row["id"] if row else None, status="denied")
@@ -82,8 +86,12 @@ def write_token(storage: Storage, token: str) -> None:
         os.unlink("session.tmp", dir_fd=storage.root_fd)
     except FileNotFoundError:
         pass
-    fd = os.open("session.tmp", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                 0o600, dir_fd=storage.root_fd)
+    fd = os.open(
+        "session.tmp",
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o600,
+        dir_fd=storage.root_fd,
+    )
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(token.encode("ascii"))

@@ -65,8 +65,9 @@ def extract_zip(content: bytes) -> dict[str, bytes]:
                 size = 0
                 with archive.open(entry) as stream:
                     while True:
-                        chunk = stream.read(min(65536, MAX_FILE_BYTES - size + 1,
-                                                MAX_EXTRACTED_BYTES - total + 1))
+                        chunk = stream.read(
+                            min(65536, MAX_FILE_BYTES - size + 1, MAX_EXTRACTED_BYTES - total + 1)
+                        )
                         if not chunk:
                             break
                         size += len(chunk)
@@ -83,7 +84,14 @@ def extract_zip(content: bytes) -> dict[str, bytes]:
             if any("/".join(pieces[:index]) in paths for index in range(1, len(pieces))):
                 raise ManagerError("Путь ZIP одновременно обозначает файл и каталог.")
         return result
-    except (zipfile.BadZipFile, NotImplementedError, RuntimeError, EOFError, ValueError, zlib.error) as error:
+    except (
+        zipfile.BadZipFile,
+        NotImplementedError,
+        RuntimeError,
+        EOFError,
+        ValueError,
+        zlib.error,
+    ) as error:
         raise ManagerError("Повреждённый или неподдерживаемый ZIP.") from error
 
 
@@ -92,7 +100,7 @@ class ArchiveService:
         self.files = files
 
     def create(self, path: str, sources: list[str]) -> dict:
-        with self.files.operation("zip_create", path) as operation:
+        with self.files.operation("zip_create", path, mutates_blobs=True) as operation:
             validate_path(path)
             if len(sources) != len(set(sources)):
                 raise ManagerError("Исходные пути ZIP не должны повторяться.")
@@ -110,12 +118,16 @@ class ArchiveService:
             return self.files.insert_file(operation, path, create_zip(files), "zip_create")
 
     def extract(self, path: str, destination: str) -> list[dict]:
-        with self.files.operation("zip_extract", path) as operation:
+        with self.files.operation("zip_extract", path, mutates_blobs=True) as operation:
             validate_path(destination)
             row = self.files.owned_file(operation, path)
             entries = extract_zip(self.files.read_content(operation, row))
             result = []
             for name, content in entries.items():
-                result.append(self.files.insert_file(operation, f"{destination}/{name}", content, "zip_extract_file"))
+                result.append(
+                    self.files.insert_file(
+                        operation, f"{destination}/{name}", content, "zip_extract_file"
+                    )
+                )
             audit(operation.connection, "zip_extract", operation.user_id, path, row["id"])
             return result

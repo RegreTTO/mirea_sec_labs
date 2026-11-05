@@ -5,6 +5,7 @@ import os
 import re
 import stat
 import uuid
+from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -36,7 +37,9 @@ class Storage:
         try:
             info = os.fstat(self.root_fd)
             if info.st_uid != os.getuid() or info.st_mode & 0o077:
-                raise ManagerError("Каталог данных должен принадлежать текущему пользователю и иметь права 0700.")
+                raise ManagerError(
+                    "Каталог данных должен принадлежать текущему пользователю и иметь права 0700."
+                )
             try:
                 os.mkdir(BLOBS_DIR_NAME, 0o700, dir_fd=self.root_fd)
             except FileExistsError:
@@ -48,7 +51,7 @@ class Storage:
             if info.st_uid != os.getuid() or info.st_mode & 0o077:
                 raise ManagerError("Небезопасные права каталога blobs.")
             os.fsync(self.root_fd)
-        except BaseException:
+        except Exception:
             self.close()
             raise
 
@@ -63,8 +66,10 @@ class Storage:
     @contextmanager
     def locked(self):
         fd = os.open(
-            "lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
-            0o600, dir_fd=self.root_fd,
+            "lock",
+            os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+            0o600,
+            dir_fd=self.root_fd,
         )
         try:
             check_private_file(fd)
@@ -78,8 +83,10 @@ class Storage:
             raise ManagerError("Файл превышает лимит 8 МиБ.")
         name = uuid.uuid4().hex
         fd = os.open(
-            name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            0o600, dir_fd=self.blobs_fd,
+            name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=self.blobs_fd,
         )
         try:
             with os.fdopen(fd, "wb") as stream:
@@ -87,7 +94,7 @@ class Storage:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.fsync(self.blobs_fd)
-        except BaseException:
+        except Exception:
             os.unlink(name, dir_fd=self.blobs_fd)
             raise
         return name
@@ -103,9 +110,26 @@ class Storage:
             raise ManagerError("Физический файл превышает лимит 8 МиБ.")
         return content
 
+    def remove(self, names: Iterable[str]) -> None:
+        names = set(names)
+        if any(not BLOB_NAME.fullmatch(name) for name in names):
+            raise ManagerError("Повреждены метаданные физического файла.")
+        changed = False
+        for name in names:
+            try:
+                os.unlink(name, dir_fd=self.blobs_fd)
+                changed = True
+            except FileNotFoundError:
+                pass
+        if changed:
+            os.fsync(self.blobs_fd)
+
     def prune(self, referenced: set[str]) -> None:
         """Удалить только созданные приложением файлы без ссылки из SQLite."""
-        for name in os.listdir(self.blobs_fd):
-            if BLOB_NAME.fullmatch(name) and name not in referenced:
-                os.unlink(name, dir_fd=self.blobs_fd)
-        os.fsync(self.blobs_fd)
+        orphaned = {
+            name
+            for name in os.listdir(self.blobs_fd)
+            if BLOB_NAME.fullmatch(name) and name not in referenced
+        }
+        if orphaned:
+            self.remove(orphaned)

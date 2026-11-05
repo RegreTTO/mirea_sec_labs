@@ -53,10 +53,14 @@ def connect(storage: Storage):
     path = storage.root / "manager.sqlite3"
     existed = os.path.lexists(path)
     if not existed and os.listdir(storage.blobs_fd):
-        raise ManagerError("БД отсутствует при существующих файлах. Восстановите БД из резервной копии.")
+        raise ManagerError(
+            "БД отсутствует при существующих файлах. Восстановите БД из резервной копии."
+        )
     fd = os.open(
-        "manager.sqlite3", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
-        0o600, dir_fd=storage.root_fd,
+        "manager.sqlite3",
+        os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+        0o600,
+        dir_fd=storage.root_fd,
     )
     try:
         check_private_file(fd)

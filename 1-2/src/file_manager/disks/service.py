@@ -6,40 +6,53 @@ import platform
 import re
 from pathlib import Path
 
-from ..db.audit import audit
-from ..auth.security import Identity
-from ..errors import ManagerError
 from ..auth.operations import operation_scope
+from ..auth.security import Identity
+from ..db.audit import audit
+from ..errors import ManagerError
 
 
-def _linux_mounts() -> list[dict]:
-    def unescape(value):
+def _linux_mounts() -> list[dict[str, object]]:
+    def unescape(value: str) -> str:
         return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match[1], 8)), value)
 
-    mounts = []
+    mounts: list[dict[str, object]] = []
     with open("/proc/self/mountinfo", encoding="utf-8") as stream:
         for line in stream:
             before, after = line.rstrip("\n").split(" - ", 1)
             fields = before.split()
             source = after.split()
-            mounts.append({"mount": unescape(fields[4]), "filesystem": source[0],
-                           "device": unescape(source[1])})
+            mounts.append(
+                {
+                    "mount": unescape(fields[4]),
+                    "filesystem": source[0],
+                    "device": unescape(source[1]),
+                }
+            )
     return mounts
 
 
-def _macos_mounts() -> list[dict]:
+def _macos_mounts() -> list[dict[str, object]]:
     # Darwin statfs из системного <sys/mount.h>; getmntinfo(MNT_NOWAIT)
     # не ждёт ответа отключённого сетевого накопителя.
     class StatFS(ctypes.Structure):
         _fields_ = [
-            ("block_size", ctypes.c_uint32), ("io_size", ctypes.c_int32),
-            ("blocks", ctypes.c_uint64), ("free", ctypes.c_uint64),
-            ("available", ctypes.c_uint64), ("files", ctypes.c_uint64),
-            ("free_files", ctypes.c_uint64), ("fsid", ctypes.c_int32 * 2),
-            ("owner", ctypes.c_uint32), ("kind", ctypes.c_uint32),
-            ("flags", ctypes.c_uint32), ("subtype", ctypes.c_uint32),
-            ("filesystem", ctypes.c_char * 16), ("mount", ctypes.c_char * 1024),
-            ("device", ctypes.c_char * 1024), ("reserved", ctypes.c_uint32 * 8),
+            ("block_size", ctypes.c_uint32),
+            ("io_size", ctypes.c_int32),
+            ("blocks", ctypes.c_uint64),
+            ("free", ctypes.c_uint64),
+            ("available", ctypes.c_uint64),
+            ("files", ctypes.c_uint64),
+            ("free_files", ctypes.c_uint64),
+            ("fsid", ctypes.c_int32 * 2),
+            ("owner", ctypes.c_uint32),
+            ("kind", ctypes.c_uint32),
+            ("flags", ctypes.c_uint32),
+            ("subtype", ctypes.c_uint32),
+            ("filesystem", ctypes.c_char * 16),
+            ("mount", ctypes.c_char * 1024),
+            ("device", ctypes.c_char * 1024),
+            ("reserved", ctypes.c_uint32 * 8),
         ]
 
     libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
@@ -49,12 +62,17 @@ def _macos_mounts() -> list[dict]:
     count = libc.getmntinfo(ctypes.byref(entries), 2)
     if count <= 0:
         raise ManagerError("ОС не вернула список точек монтирования.")
-    return [{"mount": os.fsdecode(entries[index].mount),
-             "filesystem": os.fsdecode(entries[index].filesystem),
-             "device": os.fsdecode(entries[index].device)} for index in range(count)]
+    return [
+        {
+            "mount": os.fsdecode(entries[index].mount),
+            "filesystem": os.fsdecode(entries[index].filesystem),
+            "device": os.fsdecode(entries[index].device),
+        }
+        for index in range(count)
+    ]
 
 
-def list_disks() -> list[dict]:
+def list_disks() -> list[dict[str, object]]:
     system = platform.system()
     if system == "Darwin":
         mounts = _macos_mounts()
@@ -65,22 +83,33 @@ def list_disks() -> list[dict]:
     for mount in mounts:
         try:
             info = os.statvfs(mount["mount"])
-            mount.update(total_bytes=info.f_blocks * info.f_frsize,
-                         free_bytes=info.f_bfree * info.f_frsize,
-                         available_bytes=info.f_bavail * info.f_frsize,
-                         max_name_length=info.f_namemax)
+            mount.update(
+                total_bytes=info.f_blocks * info.f_frsize,
+                free_bytes=info.f_bfree * info.f_frsize,
+                available_bytes=info.f_bavail * info.f_frsize,
+                max_name_length=info.f_namemax,
+            )
         except OSError as error:
             mount["error"] = error.strerror or "Накопитель недоступен."
     return mounts
 
 
 class DiskService:
-    def __init__(self, root: Path, identity: Identity):
+    def __init__(self, root: Path, identity: Identity) -> None:
         self.root = root
         self.identity = identity
 
-    def list(self) -> list[dict]:
-        with operation_scope(self.root, self.identity, "disks") as operation:
+    def list(self) -> list[dict[str, object]]:
+        # Не удерживаем lock и SQLite-транзакцию во время потенциально
+        # медленного обращения к локальным и сетевым файловым системам.
+        with operation_scope(self.root, self.identity, "disks"):
+            pass
+        try:
             result = list_disks()
+        except Exception:
+            with operation_scope(self.root, self.identity, "disks") as operation:
+                audit(operation.connection, "disks", operation.user_id, status="error")
+            raise
+        with operation_scope(self.root, self.identity, "disks") as operation:
             audit(operation.connection, "disks", operation.user_id)
-            return result
+        return result
