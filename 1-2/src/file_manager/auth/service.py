@@ -6,10 +6,10 @@ from pathlib import Path
 
 from . import security
 from .security import Identity
-from ..audit.service import audit
+from ..db.audit import audit
 from ..errors import ManagerError
 from ..db.database import connect
-from ..db.operations import operation_scope
+from .operations import operation_scope
 from ..db.storage import Storage
 
 

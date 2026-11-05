@@ -4,10 +4,10 @@ import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..audit.service import audit
+from ..db.audit import audit
 from ..auth.security import Identity
 from ..errors import ManagerError
-from ..db.operations import Operation, operation_scope
+from ..auth.operations import Operation, operation_scope
 from ..limits import MAX_FILE_BYTES, MAX_USER_BYTES, MAX_USER_FILES
 
 

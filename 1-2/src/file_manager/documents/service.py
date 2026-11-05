@@ -5,7 +5,7 @@ import math
 import xml.etree.ElementTree as ElementTree
 from xml.parsers import expat
 
-from ..audit.service import audit
+from ..db.audit import audit
 from ..errors import ManagerError
 from ..files.service import FileService, validate_path
 from ..limits import MAX_DOCUMENT_DEPTH, MAX_FILE_BYTES, MAX_XML_ELEMENTS

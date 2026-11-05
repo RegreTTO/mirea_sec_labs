@@ -5,7 +5,7 @@ import stat
 import zipfile
 import zlib
 
-from ..audit.service import audit
+from ..db.audit import audit
 from ..errors import ManagerError
 from ..files.service import FileService, validate_path
 from ..limits import MAX_ARCHIVE_ENTRIES, MAX_EXTRACTED_BYTES, MAX_FILE_BYTES

@@ -73,7 +73,7 @@ class Workflows(unittest.TestCase):
             finally:
                 connection.close()
 
-        targets = ["file_manager.db.operations", "file_manager.auth.service"]
+        targets = ["file_manager.auth.operations", "file_manager.auth.service"]
         for target in targets:
             self.stack.enter_context(patch(target + ".Storage", Storage))
             self.stack.enter_context(patch(target + ".connect", connect))

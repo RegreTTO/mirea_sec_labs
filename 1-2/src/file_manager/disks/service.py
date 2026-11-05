@@ -6,10 +6,10 @@ import platform
 import re
 from pathlib import Path
 
-from ..audit.service import audit
+from ..db.audit import audit
 from ..auth.security import Identity
 from ..errors import ManagerError
-from ..db.operations import operation_scope
+from ..auth.operations import operation_scope
 
 
 def _linux_mounts() -> list[dict]:

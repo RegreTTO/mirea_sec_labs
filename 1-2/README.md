@@ -152,13 +152,13 @@ uv run --frozen file-manager file read backup.zip > backup.zip
 
   ```text
   file_manager/
-  ├── auth/            # commands, service, security, middleware
+  ├── auth/            # commands, service, security, middleware, operations
   ├── files/           # commands, service: пути, CRUD, владение, квоты, версии
   ├── documents/       # commands, service: JSON/XML и проверка форматов
   ├── archives/        # commands, service: ZIP и атомарная распаковка
-  ├── audit/           # commands, service: чтение и запись журнала
+  ├── audit/           # commands, service: чтение журнала текущего пользователя
   ├── disks/           # commands, service: сведения о накопителях
-  ├── db/              # storage, database, operations: блокировки и транзакции
+  ├── db/              # storage, database, audit: хранилище, схема и SQL-запись аудита
   ├── cli/             # application, common: сборка CLI, контекст и ввод/вывод
   ├── errors.py        # общий тип ошибки приложения
   └── limits.py        # общие ограничения ресурсов
@@ -170,6 +170,11 @@ uv run --frozen file-manager file read backup.zip > backup.zip
   Ввод логина и пароля находится рядом с командами в `auth/commands.py`.
   JSON/XML и ZIP используют файловый сервис для контроля владельца и общую транзакцию для отката.
   CLI обращается прямо к доменным сервисам.
+  `auth/operations.py` объединяет проверку личности, блокировку, транзакцию и очистку blobs.
+  Низкоуровневая запись события находится в `db/audit.py`: она не импортирует авторизацию или сервис чтения журнала.
+  Зависимости направлены от доменных сервисов к авторизованной операции и далее к БД;
+  слой `db/` не зависит от `auth/`. `audit/service.py` использует обычные импорты без
+  `TYPE_CHECKING`, отложенных аннотаций или локальных импортов для разрыва циклов.
 - `docs/` — адаптированные ТЗ и учебные материалы. `docs/sources/` содержит неизменённые снимки, `docs/assets/` — иллюстрации.
 
 Сборка поставляемого пакета: `uv build`. Зависимости зафиксированы в `uv.lock`; запуск с `--frozen` не меняет lock-файл.

@@ -1,14 +1,14 @@
-"""Единая граница блокировки, транзакции, отката и очистки blobs."""
+"""Авторизованная операция: блокировка, транзакция, откат и очистка blobs."""
 
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .database import connect
-from .storage import Storage
-from ..audit.service import audit
-from ..auth.security import Identity
+from .security import Identity
+from ..db.audit import audit
+from ..db.database import connect
+from ..db.storage import Storage
 from ..errors import ManagerError
 
 

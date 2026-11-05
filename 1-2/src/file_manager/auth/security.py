@@ -9,7 +9,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 
-from ..audit.service import audit
+from ..db.audit import audit
 from ..errors import ManagerError
 from ..db.storage import Storage, check_private_file
 
