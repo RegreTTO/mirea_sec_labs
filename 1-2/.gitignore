@@ -6,3 +6,4 @@ dist/
 .env
 reports/
 .pytest_cache/
+.idea/
