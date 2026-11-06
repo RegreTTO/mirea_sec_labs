@@ -1,5 +1,3 @@
-"""Единые лимиты для файлов, документов и архивов."""
-
 MAX_FILE_BYTES = 8 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 32 * 1024 * 1024
 MAX_ARCHIVE_ENTRIES = 128

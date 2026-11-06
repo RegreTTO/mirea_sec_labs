@@ -1,5 +1,3 @@
-"""SQLite: связи, tombstone-записи файлов и сохраняемый аудит."""
-
 import os
 import sqlite3
 from contextlib import contextmanager

@@ -1,5 +1,3 @@
-"""Проверка, чтение и сохранение JSON/XML."""
-
 import json
 import math
 import xml.etree.ElementTree as ElementTree
@@ -50,7 +48,7 @@ def json_document(content: bytes) -> bytes:
         while pending:
             item, depth = pending.pop()
             if depth > MAX_DOCUMENT_DEPTH:
-                raise ValueError("Слишком глубокий JSON: максимум 64 уровня.")
+                raise ValueError(f"Слишком глубокий JSON: максимум {MAX_DOCUMENT_DEPTH} уровня.")
             if isinstance(item, dict):
                 pending.extend((child, depth + 1) for child in item.values())
             elif isinstance(item, list):

@@ -1,5 +1,3 @@
-"""CLI-команды JSON и XML."""
-
 from typing import Annotated
 
 import typer

@@ -1,5 +1,3 @@
-"""Регистрация, вход, проверка текущей сессии и выход."""
-
 import secrets
 import time
 from pathlib import Path

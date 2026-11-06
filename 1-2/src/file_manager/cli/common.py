@@ -1,5 +1,3 @@
-"""Контекст CLI, ограниченный ввод и безопасный вывод."""
-
 import json
 import sys
 from pathlib import Path

@@ -1,5 +1,3 @@
-"""Сборка CLI: настройки корня, подключение доменов и обработка ошибок."""
-
 import sqlite3
 from pathlib import Path
 from typing import Annotated

@@ -1,5 +1,3 @@
-"""Чтение журнала текущего пользователя."""
-
 from pathlib import Path
 
 from ..auth.operations import operation_scope

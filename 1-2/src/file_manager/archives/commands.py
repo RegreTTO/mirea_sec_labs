@@ -1,5 +1,3 @@
-"""CLI-команды zip."""
-
 import typer
 
 from ..auth.middleware import AuthorizedTyper

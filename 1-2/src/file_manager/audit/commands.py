@@ -1,5 +1,3 @@
-"""CLI-команды домена audit."""
-
 import typer
 
 from ..auth.middleware import AuthorizedTyper

@@ -1,5 +1,3 @@
-"""Проверки CLI без доступа к внутренним обработчикам команд."""
-
 import os
 import secrets
 import subprocess

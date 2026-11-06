@@ -1,5 +1,3 @@
-"""Regression scenarios through the public CLI and domain services."""
-
 import json
 import sqlite3
 from contextlib import closing

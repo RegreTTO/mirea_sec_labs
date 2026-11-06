@@ -1,5 +1,3 @@
-"""Регистрация, вход, выход и ввод учётных данных."""
-
 import getpass
 import os
 import sys

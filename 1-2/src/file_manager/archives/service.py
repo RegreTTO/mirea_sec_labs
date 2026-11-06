@@ -1,5 +1,3 @@
-"""Создание и безопасная атомарная распаковка ZIP."""
-
 import io
 import stat
 import zipfile

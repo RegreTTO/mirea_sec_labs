@@ -1,5 +1,3 @@
-"""CLI-команды домена disks."""
-
 import typer
 
 from ..auth.middleware import AuthorizedTyper

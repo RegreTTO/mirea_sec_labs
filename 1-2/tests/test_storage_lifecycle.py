@@ -1,5 +1,3 @@
-"""Transactional lifecycle checks for immutable physical blobs."""
-
 import sqlite3
 from pathlib import Path
 from unittest.mock import patch

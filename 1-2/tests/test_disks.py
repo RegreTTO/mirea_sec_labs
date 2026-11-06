@@ -1,5 +1,3 @@
-"""Concurrency and identity checks around slow operating-system disk discovery."""
-
 import sqlite3
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, TimeoutError

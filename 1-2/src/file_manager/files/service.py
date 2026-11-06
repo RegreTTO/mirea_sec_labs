@@ -1,5 +1,3 @@
-"""Файлы: пути, владение, содержимое, квоты и версии."""
-
 import hashlib
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime

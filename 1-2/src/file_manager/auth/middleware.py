@@ -1,5 +1,3 @@
-"""Общая авторизация leaf-команд после разбора аргументов и --help."""
-
 import typer
 from typer.core import TyperCommand
 

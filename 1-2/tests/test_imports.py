@@ -1,5 +1,3 @@
-"""Domain commands must also import without assembling the CLI first."""
-
 import subprocess
 import sys
 

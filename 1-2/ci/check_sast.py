@@ -1,5 +1,3 @@
-"""Запрет публикации при HIGH/Critical или неполном отчёте Bandit."""
-
 import json
 import sys
 from pathlib import Path

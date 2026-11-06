@@ -1,5 +1,3 @@
-"""Интеграционные проверки через публичные доменные сервисы."""
-
 import io
 import json
 import secrets
@@ -12,6 +10,7 @@ from file_manager.archives.service import ArchiveService
 from file_manager.audit.service import AuditService
 from file_manager.auth.security import Identity
 from file_manager.auth.service import AuthService
+from file_manager.documents import service as documents_service
 from file_manager.documents.service import DocumentService
 from file_manager.errors import ManagerError
 from file_manager.files.service import FileService
@@ -93,6 +92,15 @@ def test_invalid_documents_are_not_saved(manager, kind, content):
     with pytest.raises(ManagerError):
         DocumentService(manager).create(f"bad.{kind}", content, kind)
     assert manager.files() == []
+
+
+def test_json_depth_error_uses_configured_limit(monkeypatch):
+    monkeypatch.setattr(documents_service, "MAX_DOCUMENT_DEPTH", 1)
+
+    with pytest.raises(ManagerError) as error:
+        documents_service.json_document(b"[[0]]")
+
+    assert str(error.value.__cause__) == "Слишком глубокий JSON: максимум 1 уровня."
 
 
 def test_zip_round_trip(manager):
