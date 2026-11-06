@@ -7,12 +7,20 @@ import sys
 
 
 def invoke(root, *arguments, password=None):
-    environment = {key: value for key, value in os.environ.items() if key not in {"FM_ROOT", "FM_USER", "FM_PASSWORD"}}
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"FM_ROOT", "FM_USER", "FM_PASSWORD"}
+    }
     if password is not None:
         environment["FM_PASSWORD"] = password
     return subprocess.run(
         [sys.executable, "-m", "file_manager", "--root", str(root), *arguments],
-        input="", capture_output=True, text=True, env=environment, check=False,
+        input="",
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=False,
     )
 
 

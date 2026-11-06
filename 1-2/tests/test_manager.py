@@ -8,12 +8,12 @@ import zipfile
 
 import pytest
 
-from file_manager.errors import ManagerError
 from file_manager.archives.service import ArchiveService
 from file_manager.audit.service import AuditService
 from file_manager.auth.security import Identity
 from file_manager.auth.service import AuthService
 from file_manager.documents.service import DocumentService
+from file_manager.errors import ManagerError
 from file_manager.files.service import FileService
 
 
@@ -38,7 +38,8 @@ def test_file_lifecycle_and_retained_audit(manager):
     with pytest.raises(ManagerError):
         manager.read("notes/message.txt")
     successful = {
-        row["action"] for row in AuditService(manager.root, manager.identity).history()
+        row["action"]
+        for row in AuditService(manager.root, manager.identity).history()
         if row["status"] == "success"
     }
     assert {"file_create", "file_write", "file_delete"} <= successful
@@ -80,11 +81,14 @@ def test_json_and_xml_round_trip(manager):
     assert b"Alice" in documents.read("data.xml", "xml")
 
 
-@pytest.mark.parametrize("kind,content", [
-    ("json", b'{"broken":'),
-    ("xml", b"<unclosed>"),
-    ("xml", b'<!DOCTYPE root [<!ENTITY x SYSTEM "file:///etc/passwd">]><root>&x;</root>'),
-])
+@pytest.mark.parametrize(
+    "kind,content",
+    [
+        ("json", b'{"broken":'),
+        ("xml", b"<unclosed>"),
+        ("xml", b'<!DOCTYPE root [<!ENTITY x SYSTEM "file:///etc/passwd">]><root>&x;</root>'),
+    ],
+)
 def test_invalid_documents_are_not_saved(manager, kind, content):
     with pytest.raises(ManagerError):
         DocumentService(manager).create(f"bad.{kind}", content, kind)
@@ -114,10 +118,16 @@ def test_reopen_preserves_file_metadata_and_audit(manager):
     reopened = FileService(manager.root, AuthService.current(manager.root))
     assert reopened.read("persisted.txt") == b"persistent"
     with sqlite3.connect(manager.root / "manager.sqlite3") as database:
-        assert database.execute("SELECT size FROM Files WHERE path = ?", ("persisted.txt",)).fetchone() == (10,)
         assert database.execute(
-            "SELECT COUNT(*) FROM Operations WHERE action = ? AND status = ?", ("file_create", "success")
-        ).fetchone()[0] == 1
+            "SELECT size FROM Files WHERE path = ?", ("persisted.txt",)
+        ).fetchone() == (10,)
+        assert (
+            database.execute(
+                "SELECT COUNT(*) FROM Operations WHERE action = ? AND status = ?",
+                ("file_create", "success"),
+            ).fetchone()[0]
+            == 1
+        )
 
 
 def test_logout_revokes_session(manager):

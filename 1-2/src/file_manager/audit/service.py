@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
+from ..auth.operations import operation_scope
 from ..auth.security import Identity
 from ..db.audit import audit
-from ..auth.operations import operation_scope
 
 
 class AuditService:
@@ -15,7 +15,8 @@ class AuditService:
     def history(self) -> list[dict]:
         with operation_scope(self.root, self.identity, "audit_read") as operation:
             rows = operation.connection.execute(
-                "SELECT id, occurred_at, action, file_id, path, status FROM Operations WHERE user_id = ? ORDER BY id",
+                "SELECT id, occurred_at, action, file_id, path, status "
+                "FROM Operations WHERE user_id = ? ORDER BY id",
                 (operation.user_id,),
             )
             result = [dict(row) for row in rows]

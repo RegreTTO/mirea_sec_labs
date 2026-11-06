@@ -1,14 +1,10 @@
 """CLI-команды zip."""
 
-
 import typer
 
 from ..auth.middleware import AuthorizedTyper
-from ..cli.common import file_service
-from ..cli.common import print_json
-
+from ..cli.common import file_service, print_json
 from .service import ArchiveService
-
 
 app = AuthorizedTyper(no_args_is_help=True, help="Создание и безопасная распаковка ZIP.")
 

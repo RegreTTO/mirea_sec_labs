@@ -3,6 +3,7 @@
 import json
 import math
 import xml.etree.ElementTree as ElementTree
+from typing import Literal, Never
 from xml.parsers import expat
 
 from ..db.audit import audit
@@ -23,12 +24,12 @@ def _finite_float(value: str) -> float:
     return number
 
 
-def _invalid_constant(value: str):
-    raise ValueError("JSON не допускает NaN и Infinity.")
+def _invalid_constant(value: str) -> Never:
+    raise ValueError(f"JSON не допускает константу {value}.")
 
 
-def _unique_keys(pairs: list[tuple]) -> dict:
-    result = {}
+def _unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
             raise ValueError("Повторяющийся ключ JSON.")
@@ -40,7 +41,9 @@ def json_document(content: bytes) -> bytes:
     check_size(content)
     try:
         value = json.loads(
-            content, parse_constant=_invalid_constant, parse_float=_finite_float,
+            content,
+            parse_constant=_invalid_constant,
+            parse_float=_finite_float,
             object_pairs_hook=_unique_keys,
         )
         pending = [(value, 1)]
@@ -56,7 +59,9 @@ def json_document(content: bytes) -> bytes:
         check_size(result)
         return result
     except (ValueError, UnicodeError, RecursionError) as error:
-        raise ManagerError("Некорректный JSON или превышена допустимая сложность документа.") from error
+        raise ManagerError(
+            "Некорректный JSON или превышена допустимая сложность документа."
+        ) from error
 
 
 def xml_document(content: bytes) -> bytes:
@@ -65,18 +70,18 @@ def xml_document(content: bytes) -> bytes:
     elements = 0
     parser = expat.ParserCreate()
 
-    def start_element(name, attributes):
+    def start_element(name: str, attributes: dict[str, str]) -> None:
         nonlocal depth, elements
         depth += 1
         elements += 1
         if depth > MAX_DOCUMENT_DEPTH or elements > MAX_XML_ELEMENTS:
             raise ManagerError("Превышены лимиты XML: глубина 64, элементы 10000.")
 
-    def end_element(name):
+    def end_element(name: str) -> None:
         nonlocal depth
         depth -= 1
 
-    def forbidden(*arguments):
+    def forbidden(*arguments: object) -> Never:
         raise ManagerError("DTD, сущности и внешние ресурсы XML запрещены.")
 
     parser.StartElementHandler = start_element
@@ -96,12 +101,15 @@ def xml_document(content: bytes) -> bytes:
         raise ManagerError("Некорректный XML.") from error
 
 
+DocumentKind = Literal["json", "xml"]
+
+
 class DocumentService:
-    def __init__(self, files: FileService):
+    def __init__(self, files: FileService) -> None:
         self.files = files
 
-    def create(self, path: str, content: bytes, kind: str) -> dict:
-        with self.files.operation(f"{kind}_create", path) as operation:
+    def create(self, path: str, content: bytes, kind: DocumentKind) -> dict[str, object]:
+        with self.files.operation(f"{kind}_create", path, mutates_blobs=True) as operation:
             validate_path(path)
             if kind == "json":
                 content = json_document(content)
@@ -111,7 +119,7 @@ class DocumentService:
                 raise ManagerError("Неизвестный формат.")
             return self.files.insert_file(operation, path, content, f"{kind}_create")
 
-    def read(self, path: str, kind: str) -> bytes:
+    def read(self, path: str, kind: DocumentKind) -> bytes:
         with self.files.operation(f"{kind}_read", path) as operation:
             row = self.files.owned_file(operation, path)
             content = self.files.read_content(operation, row)

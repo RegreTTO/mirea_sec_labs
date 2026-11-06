@@ -14,7 +14,7 @@ from ..disks.commands import app as disks_app
 from ..documents.commands import json_app, xml_app
 from ..errors import ManagerError
 from ..files.commands import app as file_app
-
+from .common import AppSettings
 
 app = AuthorizedTyper(
     no_args_is_help=True,
@@ -68,10 +68,15 @@ app.add_typer(zip_app, name="zip")
 @app.callback()
 def configure(
     context: typer.Context,
-    root: Annotated[Path, typer.Option(help="Закрытый каталог данных (0700).", envvar="FM_ROOT")] = Path(".data"),
-    user: Annotated[str, typer.Option(help="Логин для register/login; ожидаемый логин сессии для остальных команд.")] = "",
-):
-    context.obj = {"root": root, "user": user}
+    root: Annotated[
+        Path, typer.Option(help="Закрытый каталог данных (0700).", envvar="FM_ROOT")
+    ] = Path(".data"),
+    user: Annotated[
+        str,
+        typer.Option(help="Логин для register/login; ожидаемый логин сессии для остальных команд."),
+    ] = "",
+) -> None:
+    context.obj = AppSettings(root=root, user=user)
 
 
 def main() -> None:
@@ -82,7 +87,11 @@ def main() -> None:
         raise SystemExit(1) from None
     except (OSError, sqlite3.Error) as error:
         # Системное сообщение может содержать недоверенный путь или части SQL.
-        typer.echo(f"Ошибка хранилища ({type(error).__name__}). Операция не подтверждена; проверьте аудит.", err=True)
+        typer.echo(
+            f"Ошибка хранилища ({type(error).__name__}). "
+            "Операция не подтверждена; проверьте аудит.",
+            err=True,
+        )
         raise SystemExit(1) from None
     except (UnicodeError, ValueError, RecursionError):
         typer.echo("Ошибка: некорректные входные данные.", err=True)

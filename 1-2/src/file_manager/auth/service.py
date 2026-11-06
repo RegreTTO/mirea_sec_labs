@@ -4,22 +4,22 @@ import secrets
 import time
 from pathlib import Path
 
-from . import security
-from .security import Identity
 from ..db.audit import audit
-from ..errors import ManagerError
 from ..db.database import connect
-from .operations import operation_scope
 from ..db.storage import Storage
+from ..errors import ManagerError
+from . import security
+from .operations import operation_scope
+from .security import Identity
 
 
 class AuthService:
-    def __init__(self, root: Path, identity: Identity = Identity()):
+    def __init__(self, root: Path, identity: Identity | None = None) -> None:
         self.root = root
-        self.identity = identity
+        self.identity = identity or Identity()
 
     @classmethod
-    def current(cls, root: Path, expected_user: str = ""):
+    def current(cls, root: Path, expected_user: str = "") -> Identity:
         if not root.expanduser().exists():
             raise ManagerError(security.LOGIN_REQUIRED)
         storage = Storage(root)
@@ -43,24 +43,36 @@ class AuthService:
         try:
             with storage.locked(), connect(storage) as connection:
                 # Отказ проверки пароля сохраняется в аудите до транзакции сессии.
-                user_id = security.authenticate_password(connection, self.identity.username, self.identity.password, record_success=False)
+                user_id = security.authenticate_password(
+                    connection, self.identity.username, self.identity.password, record_success=False
+                )
                 connection.execute("BEGIN IMMEDIATE")
                 try:
                     token = secrets.token_hex(32)
                     connection.execute(
-                        "INSERT INTO Sessions(id, user_id, token_hash, expires_at) VALUES (1, ?, ?, ?) "
-                        "ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, "
-                        "token_hash=excluded.token_hash, expires_at=excluded.expires_at",
-                        (user_id, security.token_hash(token), int(time.time()) + security.SESSION_SECONDS),
+                        "INSERT INTO Sessions(id, user_id, token_hash, expires_at) "
+                        "VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
+                        "user_id=excluded.user_id, token_hash=excluded.token_hash, "
+                        "expires_at=excluded.expires_at",
+                        (
+                            user_id,
+                            security.token_hash(token),
+                            int(time.time()) + security.SESSION_SECONDS,
+                        ),
                     )
                     security.write_token(storage, token)
                     audit(connection, "login", user_id)
                     connection.commit()
-                except BaseException as error:
+                except Exception as error:
                     connection.rollback()
                     # При сбое после замены файла токен не совпадёт с БД: повторный
                     # login восстановит сессию. Старые данные файлов не затронуты.
-                    audit(connection, "login", user_id, status="denied" if isinstance(error, ManagerError) else "error")
+                    audit(
+                        connection,
+                        "login",
+                        user_id,
+                        status="denied" if isinstance(error, ManagerError) else "error",
+                    )
                     raise
         finally:
             storage.close()
@@ -73,4 +85,6 @@ class AuthService:
 
     def register(self) -> None:
         with operation_scope(self.root, self.identity, "register", registration=True) as operation:
-            security.register_user(operation.connection, self.identity.username, self.identity.password)
+            security.register_user(
+                operation.connection, self.identity.username, self.identity.password
+            )
