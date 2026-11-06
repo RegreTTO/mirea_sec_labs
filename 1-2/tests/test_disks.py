@@ -1,6 +1,7 @@
 """Concurrency and identity checks around slow operating-system disk discovery."""
 
 import sqlite3
+import subprocess
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from pathlib import Path
 from threading import Event
@@ -10,7 +11,7 @@ import pytest
 
 from file_manager.auth.security import Identity
 from file_manager.auth.service import AuthService
-from file_manager.disks.service import DiskService
+from file_manager.disks.service import DiskService, _macos_mounts
 from file_manager.errors import ManagerError
 from file_manager.files.service import FileService
 
@@ -22,6 +23,59 @@ def services(tmp_path: Path) -> tuple[Path, FileService, DiskService]:
     AuthService(root, credentials).login()
     identity = AuthService.current(root)
     return root, FileService(root, identity), DiskService(root, identity)
+
+def test_macos_mounts_preserve_spaces_and_on_in_device() -> None:
+    completed = subprocess.CompletedProcess(
+        args=["/sbin/mount"],
+        returncode=0,
+        stdout=(
+            "/dev/disk3s1s1 on / (apfs, sealed, local, read-only)\n"
+            "server on share on /Volumes/Team Files (smbfs, nodev, nosuid)\n"
+        ),
+    )
+
+    with patch("subprocess.run", return_value=completed) as run:
+        assert _macos_mounts() == [
+            {"device": "/dev/disk3s1s1", "mount": "/", "filesystem": "apfs"},
+            {
+                "device": "server on share",
+                "mount": "/Volumes/Team Files",
+                "filesystem": "smbfs",
+            },
+        ]
+
+    run.assert_called_once_with(
+        ["/sbin/mount"],
+        capture_output=True,
+        check=True,
+        encoding="utf-8",
+        timeout=5,
+    )
+
+
+def test_macos_mounts_reports_command_failure() -> None:
+    error = subprocess.CalledProcessError(1, ["/sbin/mount"], stderr="permission denied")
+
+    with patch("subprocess.run", side_effect=error), pytest.raises(ManagerError):
+        _macos_mounts()
+
+
+def test_macos_mounts_reports_command_timeout() -> None:
+    error = subprocess.TimeoutExpired(["/sbin/mount"], timeout=5)
+
+    with patch("subprocess.run", side_effect=error), pytest.raises(ManagerError):
+        _macos_mounts()
+
+
+def test_macos_mounts_rejects_malformed_output() -> None:
+    completed = subprocess.CompletedProcess(
+        args=["/sbin/mount"],
+        returncode=0,
+        stdout="not a mount record\n",
+    )
+
+    with patch("subprocess.run", return_value=completed), pytest.raises(ManagerError):
+        _macos_mounts()
 
 
 def test_slow_disk_discovery_does_not_hold_storage_lock(tmp_path: Path) -> None:

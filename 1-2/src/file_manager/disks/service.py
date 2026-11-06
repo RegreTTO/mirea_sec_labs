@@ -1,9 +1,9 @@
 """Точки монтирования, сведения о дисках и аудит обращений."""
 
-import ctypes
 import os
 import platform
 import re
+import subprocess
 from pathlib import Path
 
 from ..auth.operations import operation_scope
@@ -33,43 +33,38 @@ def _linux_mounts() -> list[dict[str, object]]:
 
 
 def _macos_mounts() -> list[dict[str, object]]:
-    # Darwin statfs из системного <sys/mount.h>; getmntinfo(MNT_NOWAIT)
-    # не ждёт ответа отключённого сетевого накопителя.
-    class StatFS(ctypes.Structure):
-        _fields_ = [
-            ("block_size", ctypes.c_uint32),
-            ("io_size", ctypes.c_int32),
-            ("blocks", ctypes.c_uint64),
-            ("free", ctypes.c_uint64),
-            ("available", ctypes.c_uint64),
-            ("files", ctypes.c_uint64),
-            ("free_files", ctypes.c_uint64),
-            ("fsid", ctypes.c_int32 * 2),
-            ("owner", ctypes.c_uint32),
-            ("kind", ctypes.c_uint32),
-            ("flags", ctypes.c_uint32),
-            ("subtype", ctypes.c_uint32),
-            ("filesystem", ctypes.c_char * 16),
-            ("mount", ctypes.c_char * 1024),
-            ("device", ctypes.c_char * 1024),
-            ("reserved", ctypes.c_uint32 * 8),
-        ]
+    try:
+        completed = subprocess.run(
+            ["/sbin/mount"],
+            capture_output=True,
+            check=True,
+            encoding="utf-8",
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise ManagerError("ОС не ответила при получении списка точек монтирования.") from error
+    except (subprocess.CalledProcessError, OSError) as error:
+        raise ManagerError("Не удалось получить список точек монтирования.") from error
 
-    libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
-    libc.getmntinfo.argtypes = [ctypes.POINTER(ctypes.POINTER(StatFS)), ctypes.c_int]
-    libc.getmntinfo.restype = ctypes.c_int
-    entries = ctypes.POINTER(StatFS)()
-    count = libc.getmntinfo(ctypes.byref(entries), 2)
-    if count <= 0:
-        raise ManagerError("ОС не вернула список точек монтирования.")
-    return [
-        {
-            "mount": os.fsdecode(entries[index].mount),
-            "filesystem": os.fsdecode(entries[index].filesystem),
-            "device": os.fsdecode(entries[index].device),
-        }
-        for index in range(count)
-    ]
+    mounts: list[dict[str, object]] = []
+    for line in completed.stdout.splitlines():
+        if not line:
+            continue
+        location, details_separator, details = line.rpartition(" (")
+        device, mount_separator, mount = location.rpartition(" on ")
+        filesystem = details.removesuffix(")").partition(",")[0]
+        if (
+            not details_separator
+            or not mount_separator
+            or not details.endswith(")")
+            or not device
+            or not mount
+            or not filesystem
+        ):
+            raise ManagerError("ОС вернула некорректную запись о точке монтирования.")
+        mounts.append({"mount": mount, "filesystem": filesystem, "device": device})
+
+    return mounts
 
 
 def list_disks() -> list[dict[str, object]]:
