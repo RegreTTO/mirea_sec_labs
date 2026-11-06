@@ -24,6 +24,7 @@ def services(tmp_path: Path) -> tuple[Path, FileService, DiskService]:
     identity = AuthService.current(root)
     return root, FileService(root, identity), DiskService(root, identity)
 
+
 def test_macos_mounts_preserve_spaces_and_on_in_device() -> None:
     completed = subprocess.CompletedProcess(
         args=["/sbin/mount"],
