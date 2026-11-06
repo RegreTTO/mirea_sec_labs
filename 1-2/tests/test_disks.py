@@ -78,6 +78,29 @@ def test_macos_mounts_rejects_malformed_output() -> None:
         _macos_mounts()
 
 
+@pytest.mark.parametrize("stdout", ["", "\n\n"])
+def test_macos_mounts_rejects_empty_output(stdout: str) -> None:
+    completed = subprocess.CompletedProcess(
+        args=["/sbin/mount"],
+        returncode=0,
+        stdout=stdout,
+    )
+
+    with patch("subprocess.run", return_value=completed), pytest.raises(ManagerError):
+        _macos_mounts()
+
+
+def test_macos_mounts_rejects_trailing_details() -> None:
+    completed = subprocess.CompletedProcess(
+        args=["/sbin/mount"],
+        returncode=0,
+        stdout="/dev/disk3s1s1 on / (apfs) trailing)\n",
+    )
+
+    with patch("subprocess.run", return_value=completed), pytest.raises(ManagerError):
+        _macos_mounts()
+
+
 def test_slow_disk_discovery_does_not_hold_storage_lock(tmp_path: Path) -> None:
     _, files, disks = services(tmp_path)
     entered = Event()

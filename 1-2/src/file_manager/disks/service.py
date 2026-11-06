@@ -52,17 +52,23 @@ def _macos_mounts() -> list[dict[str, object]]:
             continue
         location, details_separator, details = line.rpartition(" (")
         device, mount_separator, mount = location.rpartition(" on ")
-        filesystem = details.removesuffix(")").partition(",")[0]
+        mount_details = details.removesuffix(")")
+        filesystem = mount_details.partition(",")[0]
         if (
             not details_separator
             or not mount_separator
             or not details.endswith(")")
+            or "(" in mount_details
+            or ")" in mount_details
             or not device
             or not mount
             or not filesystem
         ):
             raise ManagerError("ОС вернула некорректную запись о точке монтирования.")
         mounts.append({"mount": mount, "filesystem": filesystem, "device": device})
+
+    if not mounts:
+        raise ManagerError("ОС не вернула список точек монтирования.")
 
     return mounts
 
