@@ -10,14 +10,18 @@ SQLite хранит пользователей, метаданные и ауди
 
 ```sh
 uv sync --frozen
-uv run --frozen file-manager --help
-uv run --frozen file-manager register
-uv run --frozen file-manager login
-uv run --frozen file-manager file create notes/hello.txt --text 'Привет'
-uv run --frozen file-manager file read notes/hello.txt
+source .venv/bin/activate
+
+file-manager --help
+file-manager register
+file-manager login
+file-manager file create notes/hello.txt --text 'Привет'
+file-manager file read notes/hello.txt
 ```
 
 `register` запрашивает логин и пароль; пароль вводится скрыто дважды. После регистрации выполните `login`.
+`source .venv/bin/activate` активирует созданное `uv` окружение в текущем shell.
+Все команды ниже выполняются в этом активированном окружении, поэтому префикс `uv run` не нужен.
 `login` запрашивает логин и пароль, затем сохраняет локальную сессию на 24 часа.
 Следующие команды используют вошедшего пользователя без повторного ввода логина или пароля.
 `logout` завершает сессию; новый `login` заменяет предыдущую сессию, в том числе при входе под другим пользователем.
@@ -28,7 +32,7 @@ uv run --frozen file-manager file read notes/hello.txt
 Для `register` и `login` доступны опции `--user` и `--password`:
 
 ```sh
-uv run --frozen file-manager login --user alice
+file-manager login --user alice
 ```
 
 Без `--password` пароль запрашивается скрыто. Передача пароля флагом разрешена для автоматизации, но небезопасна:
@@ -49,26 +53,26 @@ uv run --frozen file-manager login --user alice
 
 ```sh
 # Метаданные, размер в байтах, владелец и revision.
-uv run --frozen file-manager file list
+file-manager file list
 
 # Замена и удаление требуют актуальную revision из file list.
-uv run --frozen file-manager file write notes/hello.txt --revision 1 --text 'Новый текст'
-uv run --frozen file-manager file delete notes/hello.txt --revision 2
+file-manager file write notes/hello.txt --revision 1 --text 'Новый текст'
+file-manager file delete notes/hello.txt --revision 2
 
 # Запись документов создаёт новые файлы; некорректный ввод не сохраняется.
-uv run --frozen file-manager json write example.json --text '{"name":"Alice","items":[1,2]}'
-uv run --frozen file-manager json read example.json
-uv run --frozen file-manager xml write example.xml --text '<root><name>Alice</name></root>'
-uv run --frozen file-manager xml read example.xml
+file-manager json write example.json --text '{"name":"Alice","items":[1,2]}'
+file-manager json read example.json
+file-manager xml write example.xml --text '<root><name>Alice</name></root>'
+file-manager xml read example.xml
 
 # ZIP из своих файлов. Извлечение не перезаписывает существующие файлы.
-uv run --frozen file-manager zip create backup.zip example.json example.xml
-uv run --frozen file-manager zip extract backup.zip restored
-uv run --frozen file-manager file read restored/example.json
+file-manager zip create backup.zip example.json example.xml
+file-manager zip extract backup.zip restored
+file-manager file read restored/example.json
 
 # Диски/точки монтирования и собственный аудит, включая удалённые файлы.
-uv run --frozen file-manager disks
-uv run --frozen file-manager audit
+file-manager disks
+file-manager audit
 ```
 
 Список точек монтирования читается из `/proc/self/mountinfo` на Linux и из вывода
@@ -78,14 +82,40 @@ uv run --frozen file-manager audit
 Для двоичных файлов используйте перенаправление. Сначала выполните login; файловые команды не запрашивают пароль:
 
 ```sh
-uv run --frozen file-manager file create imported.zip < archive.zip
-uv run --frozen file-manager file read backup.zip > backup.zip
+file-manager file create imported.zip < archive.zip
+file-manager file read backup.zip > backup.zip
 ```
 
 Импортированный ZIP затем можно обработать через `zip extract`. JSON/XML также принимаются через stdin.
 Чтение JSON/XML проверяет формат независимо от способа создания файла.
 Команда `file write` заменяет обычные байты; валидность JSON/XML проверяется форматными командами чтения.
 Ошибки дают ненулевой код завершения и сообщение в stderr. Двоичные данные и опасные управляющие символы не выводятся прямо в терминал.
+
+## Демонстрация проверки документов
+
+Каталог `sources/` содержит корректный JSON и примеры входных данных, которые приложение
+обязано отклонить. Сначала выполните `register` и `login` из раздела «Запуск», затем:
+
+```sh
+# Корректный документ сохраняется.
+file-manager json write demo/valid.json < sources/valid.json
+
+# Вложенность JSON превышает допустимые 64 уровня.
+file-manager json write demo/too-deep.json < sources/json-too-deep.json
+
+# Повторяющийся ключ.
+file-manager json write demo/duplicate-key.json < sources/json-duplicate-key.json
+
+# Лишняя запятая нарушает синтаксис JSON.
+file-manager json write demo/invalid-syntax.json < sources/json-invalid-syntax.json
+
+# XML с DOCTYPE и пользовательской сущностью запрещён.
+file-manager xml write demo/doctype.xml < sources/xml-doctype.xml
+```
+
+Первая команда завершается успешно. Каждая следующая команда завершается с ненулевым кодом,
+пишет сообщение об ошибке в stderr и не создаёт файл. Код завершения последней команды можно
+проверить сразу после запуска командой `echo $?`.
 
 ## Данные и согласованность
 
@@ -181,16 +211,17 @@ SQLite остаётся источником истины. Ошибка очис
   Зависимости направлены от доменных сервисов к авторизованной операции и далее к БД;
   слой `db/` не зависит от `auth/`. `audit/service.py` использует обычные импорты без
   `TYPE_CHECKING`, отложенных аннотаций или локальных импортов для разрыва циклов.
+- `sources/` — входные файлы для демонстрации успешной проверки и безопасных отказов JSON/XML.
 - `docs/` — адаптированные ТЗ и учебные материалы. `docs/sources/` содержит неизменённые снимки, `docs/assets/` — иллюстрации.
 
 Сборка поставляемого пакета: `uv build`. Зависимости зафиксированы в `uv.lock`; запуск с `--frozen` не меняет lock-файл.
 
-Локальные проверки после `uv sync --frozen`:
+Локальные проверки после `uv sync --frozen` и `source .venv/bin/activate`:
 
 ```sh
-uv run --frozen pytest tests -q
-uv run --frozen ruff check src tests ci/check_sast.py
-uv run --frozen ruff format --check src tests ci/check_sast.py
+pytest tests -q
+ruff check src tests ci/check_sast.py
+ruff format --check src tests ci/check_sast.py
 ```
 
 Тесты используют настоящее POSIX-хранилище на Linux/macOS. Windows не входит в поддерживаемые платформы.
