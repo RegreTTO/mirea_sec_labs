@@ -7,15 +7,20 @@ import sqlite3
 import time
 from dataclasses import dataclass
 
+from argon2 import PasswordHasher, Type
+from argon2.exceptions import InvalidHashError, VerificationError
+
 from ..db.audit import audit
 from ..db.storage import Storage, check_private_file
 from ..errors import ManagerError
 
+PASSWORD_HASHER = PasswordHasher(
+    time_cost=3, memory_cost=65536, parallelism=4, hash_len=32, salt_len=16, type=Type.ID,
+)
+
 
 def hash_password(password: str, salt: bytes) -> bytes:
-    return hashlib.scrypt(
-        password.encode("utf-8"), salt=salt, n=32768, r=8, p=1, maxmem=64 * 1024 * 1024
-    )
+    return PASSWORD_HASHER.hash(password, salt=salt).encode("ascii")
 
 
 def register_user(connection, username: str, password: str) -> int:
@@ -44,11 +49,32 @@ def authenticate_password(
         audit(connection, "login", row["id"] if row else None, status="denied")
         raise ManagerError("Неверный логин или пароль.")
     # Даже отсутствующий логин требует вычисления хеша.
-    salt = row["salt"] if row else b"\0" * 16
-    expected = row["password_hash"] if row else b"\0" * 64
-    if not hmac.compare_digest(hash_password(password, salt), expected) or row is None:
+    expected = row["password_hash"] if row else None
+    legacy = isinstance(expected, bytes) and len(expected) == 64
+    if row is None:
+        hash_password(password, secrets.token_bytes(16))
+        valid = False
+    elif legacy:
+        # Старый формат читается только для переноса существующих аккаунтов.
+        digest = hashlib.scrypt(
+            password.encode("utf-8"), salt=row["salt"],
+            n=32768, r=8, p=1, maxmem=64 * 1024 * 1024,
+        )
+        valid = hmac.compare_digest(digest, expected)
+    else:
+        try:
+            valid = PASSWORD_HASHER.verify(expected, password)
+        except (VerificationError, InvalidHashError):
+            valid = False
+    if not valid:
         audit(connection, "login", row["id"] if row else None, status="denied")
         raise ManagerError("Неверный логин или пароль.")
+    if legacy or PASSWORD_HASHER.check_needs_rehash(expected):
+        salt = secrets.token_bytes(16)
+        connection.execute(
+            "UPDATE Users SET salt = ?, password_hash = ? WHERE id = ?",
+            (salt, hash_password(password, salt), row["id"]),
+        )
     if record_success:
         audit(connection, "login", row["id"])
     return row["id"]
