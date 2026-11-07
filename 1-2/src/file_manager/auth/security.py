@@ -1,5 +1,4 @@
 import hashlib
-import hmac
 import os
 import re
 import secrets
@@ -50,17 +49,9 @@ def authenticate_password(
         raise ManagerError("Неверный логин или пароль.")
     # Даже отсутствующий логин требует вычисления хеша.
     expected = row["password_hash"] if row else None
-    legacy = isinstance(expected, bytes) and len(expected) == 64
     if row is None:
         hash_password(password, secrets.token_bytes(16))
         valid = False
-    elif legacy:
-        # Старый формат читается только для переноса существующих аккаунтов.
-        digest = hashlib.scrypt(
-            password.encode("utf-8"), salt=row["salt"],
-            n=32768, r=8, p=1, maxmem=64 * 1024 * 1024,
-        )
-        valid = hmac.compare_digest(digest, expected)
     else:
         try:
             valid = PASSWORD_HASHER.verify(expected, password)
@@ -69,7 +60,7 @@ def authenticate_password(
     if not valid:
         audit(connection, "login", row["id"] if row else None, status="denied")
         raise ManagerError("Неверный логин или пароль.")
-    if legacy or PASSWORD_HASHER.check_needs_rehash(expected):
+    if PASSWORD_HASHER.check_needs_rehash(expected):
         salt = secrets.token_bytes(16)
         connection.execute(
             "UPDATE Users SET salt = ?, password_hash = ? WHERE id = ?",

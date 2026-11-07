@@ -1,6 +1,5 @@
-"""Пароли Argon2id и перенос существующих scrypt-аккаунтов."""
+"""Проверка паролей Argon2id."""
 
-import hashlib
 import secrets
 import sqlite3
 
@@ -20,20 +19,9 @@ def connection():
         yield database
 
 
-@pytest.mark.parametrize("legacy", [False, True])
-def test_password_verification_and_migration(connection, legacy):
+def test_password_verification(connection):
     password = secrets.token_urlsafe(24)
-    if legacy:
-        salt = secrets.token_bytes(16)
-        digest = hashlib.scrypt(
-            password.encode(), salt=salt, n=32768, r=8, p=1, maxmem=64 * 1024 * 1024,
-        )
-        user_id = connection.execute(
-            "INSERT INTO Users(username, salt, password_hash) VALUES (?, ?, ?)",
-            ("alice", salt, digest),
-        ).lastrowid
-    else:
-        user_id = register_user(connection, "alice", password)
+    user_id = register_user(connection, "alice", password)
     original = connection.execute("SELECT password_hash FROM Users").fetchone()[0]
 
     with pytest.raises(ManagerError, match="Неверный логин или пароль"):
