@@ -67,7 +67,7 @@ jobs:
       - name: Test installed wheel
         run: |
           (cd dist && sha256sum -c SHA256SUMS)
-          uv sync --frozen --only-group dev
+          uv sync --frozen --only-dev
           uv pip install --python .venv/bin/python --require-hashes -r dist/requirements.txt
           uv pip install --python .venv/bin/python --no-deps dist/*.whl
           .venv/bin/ruff check src tests ci/check_sast.py

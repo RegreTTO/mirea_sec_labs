@@ -14,7 +14,12 @@ from ..db.storage import Storage, check_private_file
 from ..errors import ManagerError
 
 PASSWORD_HASHER = PasswordHasher(
-    time_cost=3, memory_cost=65536, parallelism=4, hash_len=32, salt_len=16, type=Type.ID,
+    time_cost=3,
+    memory_cost=65536,
+    parallelism=4,
+    hash_len=32,
+    salt_len=16,
+    type=Type.ID,
 )
 
 
